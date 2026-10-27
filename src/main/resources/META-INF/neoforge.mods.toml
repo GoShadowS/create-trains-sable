@@ -1,0 +1,77 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "Apache-2.0"
+issueTrackerURL = "https://github.com/GoShadowS/create-trains-sable/issues"
+
+[[mods]]
+modId = "createtrainssable"
+version = "0.1.0"
+displayName = "Create Trains Sable"
+authors = "GoShadowS"
+description = '''
+Adds Sable/Rapier rigid-body physics to Create trains: mass, wheel adhesion,
+collisions and physical derailment, with a hand-off back to the TrackGraph
+once a wreck has settled on a straight piece of track.
+'''
+
+[[mixins]]
+config = "createtrainssable.mixins.json"
+
+[[dependencies.createtrainssable]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.228,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.createtrainssable]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.22)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.createtrainssable]]
+modId = "create"
+type = "required"
+versionRange = "[6.0.10,6.1.0)"
+ordering = "AFTER"
+side = "BOTH"
+
+# Optional on purpose: a required dependency would crash the game without Sable and
+# make the documented degraded mode impossible. BackendLoader checks this at runtime.
+[[dependencies.createtrainssable]]
+modId = "sable"
+type = "optional"
+versionRange = "[2.0.0,3.0.0)"
+ordering = "AFTER"
+side = "BOTH"
+
+# Bundled as jar-in-jar; Sable itself also embeds this library and overrides its service.
+[[dependencies.createtrainssable]]
+modId = "sablecompanion"
+type = "optional"
+versionRange = "[1.6.0,1.7.0)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.createtrainssable]]
+modId = "aeronautics"
+type = "optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.createtrainssable]]
+modId = "simulated"
+type = "optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.createtrainssable]]
+modId = "offroad"
+type = "optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "BOTH"

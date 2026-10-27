@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "create:small_bogey",
+    "create:large_bogey"
+  ]
+}

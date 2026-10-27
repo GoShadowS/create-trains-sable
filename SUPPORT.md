@@ -13,15 +13,15 @@ Please search existing issues first. Crashes that only happen with Sable or Crea
 installed should also be reported to those projects if they reproduce without this
 add-on.
 
-## Questions and setup help
+## Questions
 
 Use GitHub Discussions at
 https://github.com/GoShadowS/create-trains-sable/discussions if Discussions is
 enabled for the repository. Otherwise, open an issue with the `question` label.
 
-For anything related to compiling or running the development client, read
-[BUILDING.md](BUILDING.md) first. The configuration keys and the current feature
-set are described in [README.md](README.md).
+The configuration keys and the current feature set are described in
+[README.md](README.md). Questions about compiling the project or running a
+development client are not answered here.
 
 There is no Discord server, forum, paid support or release hotline at the moment.
 Issues are the only channel with a written history, so they get priority.
@@ -32,3 +32,4 @@ Issues are the only channel with a written history, so they get priority.
 - Sable's native Rapier library, its renderer, or crashes that happen before this
   add-on loads.
 - Minecraft launchers, modpack launchers, and Java installations on your machine.
+- Compiling the project or setting up a development environment.

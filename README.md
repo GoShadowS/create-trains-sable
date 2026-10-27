@@ -9,37 +9,22 @@ working.
 
 > **Status: 0.1.0, early development.** The physics model is unit-tested; the
 > Sable integration is written against Sable 2.0.6's public API but has not yet
-> been validated in a live game build. There is no released jar. Read
+> been validated in a live game. There is no released jar. Read
 > [Known Issues / Limitations](#known-issues--limitations) before adding this to
 > a world you care about.
 
-## Requirements
+## Compatibility
 
-| Component | Version |
-| --- | --- |
-| Minecraft | 1.21.1 |
-| Java | 21 |
-| NeoForge | 21.1.228 or newer in the 21.1 line |
-| Create | 6.0.10.x |
-| Sable | 2.0.x (optional, needed for physics) |
-| Sable Companion | 1.6.0 (bundled in the mod jar) |
+Targets Minecraft 1.21.1 on NeoForge 21.1.228 or newer in the 21.1 line, with
+Create 6.0.10.x. Sable 2.0.x is optional and is required for the physics mode;
+Sable Companion 1.6.0 is bundled. Java 21 is the language level. There is no
+Fabric version and no multiloader layout while Sable's development is centred on
+NeoForge.
 
-The project is NeoForge-only. There is no Fabric version, no multiloader layout
-and no plan to add one while Sable's development is centred on NeoForge.
-
-## Installation
-
-1. Install Minecraft 1.21.1 with NeoForge 21.1.228 or newer.
-2. Put Create 6.0.10.x and Sable 2.0.x in `mods/`. Sable pulls in Veil, Flywheel,
-   Ponder and Registrate; use the versions its own documentation lists.
-3. Build this add-on from source with `./gradlew build` and copy
-   `build/libs/createtrainssable-0.1.0.jar` into `mods/`. Sable Companion is
-   embedded in that jar, so you do not install it separately.
-
-If Sable is missing, the add-on loads, writes a warning to the log and leaves all
-train movement to Create. Nothing is converted and `TrackGraph`, stations and
-signals are untouched. This is why `sable` is declared as an `optional`
-dependency in `neoforge.mods.toml`, not a required one.
+Without Sable the add-on loads, writes a warning to the log and leaves all train
+movement to Create. Nothing is converted and `TrackGraph`, stations and signals
+are untouched. This is why `sable` is declared as an `optional` dependency in
+`neoforge.mods.toml`, not a required one.
 
 ## What it does
 
@@ -110,24 +95,14 @@ through its datapack-driven `MassTracker`. This mod ships definitions under
 `data/createtrainssable/physics_block_properties/` for Create bogeys, railway
 casings and train controls; server owners can override them with a datapack.
 
-## Building and testing
-
-See [BUILDING.md](BUILDING.md) for the full IntelliJ IDEA walkthrough. In short:
-
-```bash
-./gradlew test          # dependency-free physics unit tests
-./gradlew build         # jar in build/libs/
-./gradlew runClient     # development client, same as the IDE run config
-```
-
 ## Known Issues / Limitations
 
-- **Not yet validated in a live build.** The source is written against
+- **Not yet validated in a live game.** The source is written against
   Create 6.0.10-281, Sable 2.0.6 and NeoForge 21.1.228, but no jar built from
   this repository has been run in a game yet. Expect to file the first
   integration bugs.
 - **No released jar.** Downloadable builds will appear once the integration has
-  been exercised in-game. Until then, build from source.
+  been exercised in-game.
 - **Sable's API is not semver-stable.** Types such as `ServerSubLevel`,
   `RigidBodyHandle` and `SubLevelAssemblyHelper` may move between Sable releases.
   A new Sable version can require an update here.
@@ -183,7 +158,7 @@ someone from deleting a line of text, but doing so breaches the licence.
 
 This add-on **does not include or redistribute the source code of Create, Sable,
 Sable Companion or Create: Aeronautics**. It depends on their published jars as
-runtime libraries and compiles against their public APIs. Create and Sable
+runtime libraries and uses their public APIs. Create and Sable
 Companion are MIT-licensed. Sable is licensed under the
 [PolyForm Shield License 1.0.0](https://polyformproject.org/licenses/shield/1.0.0/),
 which allows use and modification but restricts competing commercial products.

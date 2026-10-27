@@ -9,6 +9,10 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Nothing yet.
 
+### Removed
+- The standalone build guide and the installation instructions from the
+  documentation.
+
 ## [0.1.0] - 2026-10-27
 
 ### Added
@@ -19,13 +23,13 @@ All notable changes to this project are documented here. The format follows
 - Conversion of a derailed carriage's blocks into a Sable sub-level, with the initial velocity taken from the train's speed and track direction.
 - Resynchronisation back to Create's TrackGraph using Create's own `TrainMigration` and `TravellingPoint.migrateTo` API.
 - Datapack definitions for Sable block physics properties applied to Create bogeys, casings and train controls.
-- Project documentation: building guide, contribution rules, code of conduct, security policy, support channels and citation metadata.
+- Project documentation: contribution rules, code of conduct, security policy, support channels and citation metadata.
 
 ### Changed
 - The repository README now describes the mod instead of the repository owner.
 
 ### Known limitations in this release
-- No prebuilt jar is published yet. Build from source with `./gradlew build`.
+- No prebuilt jar is published yet.
 - The Sable integration is written against Sable 2.0.6's API but has not been validated in a live game build.
 - Rebinding requires a straight track segment that fits the whole train, or that the original graph still resolves the old travelling points.
 

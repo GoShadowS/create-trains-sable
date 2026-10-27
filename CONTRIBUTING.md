@@ -4,17 +4,11 @@ Thanks for taking the time to work on this project. The code is small enough to
 read in an afternoon, and the physics model is deliberately separated from
 Minecraft so that most changes can be tested without launching the game.
 
-## Development environment
+## Before you start
 
-1. Install a JDK 21. The Gradle build also uses the Foojay toolchain resolver, so
-   IntelliJ IDEA can download a matching JDK if yours is older.
-2. Clone the repository: `git clone https://github.com/GoShadowS/create-trains-sable.git`.
-3. Follow [BUILDING.md](BUILDING.md) up to the point where
-   `Create Trains Sable: Client` starts a test world. You do not need to install
-   Create, Sable or NeoForge by hand; Gradle resolves them.
-4. Run `./gradlew test` before you open a pull request. The unit tests cover the
-   configuration snapshot, mass and inertia, curve geometry, derailment
-   thresholds, wheel adhesion and resync hysteresis.
+The project targets Java 21. Changes must keep the existing unit tests green;
+they cover the configuration snapshot, mass and inertia, curve geometry,
+derailment thresholds, wheel adhesion and resync hysteresis.
 
 ## Branches and commits
 
@@ -43,7 +37,7 @@ description should answer:
 
 - What changed and why.
 - Which files are affected.
-- How to reproduce or verify the change (commands, in-game steps, log lines).
+- How to reproduce or verify the change (unit tests, in-game steps, log lines).
 - Risks and known limitations, especially anything touching Sable's internal API.
 
 Include a short acceptance checklist when it makes sense, for example

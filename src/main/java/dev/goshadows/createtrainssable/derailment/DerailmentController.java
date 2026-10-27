@@ -48,16 +48,18 @@ public final class DerailmentController {
             }
         }
 
-        for (CrashSignals.Signal signal : CrashSignals.drain()) {
-            Train train = Create.RAILWAYS.trains.get(signal.trainId());
-            if (train == null || sessions.contains(train.id)) {
-                continue;
-            }
-            DerailmentModel.Inputs inputs = new DerailmentModel.Inputs(signal.speed(),
-                    Double.POSITIVE_INFINITY, signal.speed(), 0.0, true);
-            DerailmentModel.Verdict verdict = DerailmentModel.evaluate(inputs, tuning);
-            if (verdict.derail()) {
-                begin(level, train, signal.snapshot(), verdict, tuning, true);
+        if (trainsTickHere) {
+            for (CrashSignals.Signal signal : CrashSignals.drain()) {
+                Train train = Create.RAILWAYS.trains.get(signal.trainId());
+                if (train == null || sessions.contains(train.id)) {
+                    continue;
+                }
+                DerailmentModel.Inputs inputs = new DerailmentModel.Inputs(signal.speed(),
+                        Double.POSITIVE_INFINITY, signal.speed(), 0.0, true);
+                DerailmentModel.Verdict verdict = DerailmentModel.evaluate(inputs, tuning);
+                if (verdict.derail()) {
+                    begin(level, train, signal.snapshot(), verdict, tuning, true);
+                }
             }
         }
 

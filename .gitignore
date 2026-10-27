@@ -44,3 +44,7 @@ bin/
 # OS junk
 .DS_Store
 Thumbs.db
+
+# Local development state
+local.properties
+src/generated/resources/.cache/

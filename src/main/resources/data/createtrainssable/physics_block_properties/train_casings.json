@@ -1,0 +1,8 @@
+{
+  "selector": "#createtrainssable:train_casings",
+  "priority": 1100,
+  "properties": {
+    "sable:mass": 1.6,
+    "sable:friction": 1.0
+  }
+}

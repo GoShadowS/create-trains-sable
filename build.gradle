@@ -48,6 +48,7 @@ dependencies {
     implementation("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}") { transitive = false }
     implementation("com.tterrag.registrate:Registrate:${registrate_version}") { transitive = false }
     compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
+    compileOnly("org.spongepowered:mixin:${mixin_version}")
     localRuntime("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
 
     // Sable Companion is bundled. Sable replaces its service implementation at

@@ -1,0 +1,9 @@
+{
+  "selector": "#createtrainssable:train_bogeys",
+  "priority": 1100,
+  "properties": {
+    "sable:mass": 6.0,
+    "sable:friction": 1.15,
+    "sable:restitution": 0.05
+  }
+}

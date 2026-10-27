@@ -1,0 +1,8 @@
+{
+  "selector": "create:controls",
+  "priority": 1100,
+  "properties": {
+    "sable:mass": 1.2,
+    "sable:friction": 1.0
+  }
+}

@@ -9,7 +9,7 @@ working.
 
 > **Status: 0.1.0, early development.** The physics model is unit-tested; the
 > Sable integration is written against Sable 2.0.6's public API but has not yet
-> been validated in a live game. There is no released jar. Read
+> been validated in a live game. There is no public release yet. Read
 > [Known Issues / Limitations](#known-issues--limitations) before adding this to
 > a world you care about.
 
@@ -101,7 +101,7 @@ casings and train controls; server owners can override them with a datapack.
   Create 6.0.10-281, Sable 2.0.6 and NeoForge 21.1.228, but no jar built from
   this repository has been run in a game yet. Expect to file the first
   integration bugs.
-- **No released jar.** Downloadable builds will appear once the integration has
+- **No public release yet.** A release will be published once the integration has
   been exercised in-game.
 - **Sable's API is not semver-stable.** Types such as `ServerSubLevel`,
   `RigidBodyHandle` and `SubLevelAssemblyHelper` may move between Sable releases.

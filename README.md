@@ -16,8 +16,10 @@ working.
 ## Compatibility
 
 Targets Minecraft 1.21.1 on NeoForge 21.1.228 or newer in the 21.1 line, with
-Create 6.0.10.x. Sable 2.0.x is optional and is required for the physics mode;
-Sable Companion 1.6.0 is bundled. Java 21 is the language level. There is no
+Create 6.0.10.x. Sable 2.0.x is optional and is required for the structure and
+physics modes; Sable Companion 1.6.0 is bundled. Create: Aeronautics 1.3.x is
+compiled against - it is the reference for what a Sable structure feels like in
+game - but it is neither required nor bundled. Java 21 is the language level. There is no
 Fabric version and no multiloader layout while Sable's development is centred on
 NeoForge.
 
@@ -28,27 +30,36 @@ are untouched. This is why `sable` is declared as an `optional` dependency in
 
 ## What it does
 
-A server-side monitor reads the public state of every Create train each tick. It
-samples the leading bogey's position, fits a circle through three samples to get
-the curve radius, and compares the train's lateral acceleration with a limit
-derived from track gauge, centre-of-gravity height and wheel-flange friction.
-Create's own `Train.crash()` event, a sudden speed drop and a hard deceleration
-are also conversion triggers.
+The add-on replaces the object a train is made of. A Create train is a
+`CarriageContraption` entity that the game draws and collides for you; here every
+carriage is turned into a **Sable sub-level** instead, so the train is a real
+structure in Sable's plot grid: it is rendered by Sable, it collides with terrain,
+entities and other sub-levels, and tools that understand Sable can see it.
 
-On conversion, the mod writes a copy of each carriage's virtual blocks into the
-world at the train's current pose and asks Sable to assemble those blocks into a
-sub-level. The copy carries block-entity NBT, so chests and tanks in the wreck
-are not empty. The original `CarriageContraptionEntity` stays alive but hidden;
-it still owns the contraption's inventory, seats, schedule and signal state.
-Sable's Rapier pipeline owns the body from that point on. Wheel adhesion, rolling
-resistance and braking are applied as impulses on Sable's physics substeps, not
-by teleporting the body.
+The replacement happens as soon as a train exists - built in a station or loaded
+from a save - unless `convertOnAssembly` is turned off. Create's
+`CarriageContraptionEntity` stays alive but invisible: it still owns the schedule,
+the seats, the contraption inventory and the train maths, and the sub-level is put
+back onto it every tick. Create therefore keeps choosing the route, while what the
+player sees and bumps into is Sable.
+
+A server-side monitor reads the public state of every train each tick. It samples
+the leading bogey's position, fits a circle through three samples to get the curve
+radius, and compares the train's lateral acceleration with a limit derived from
+track gauge, centre-of-gravity height and wheel-flange friction. Create's own
+`Train.crash()` event, a sudden speed drop and a hard deceleration are also
+derailment triggers.
+
+When a trigger fires, the mod stops following the train: the sub-levels are
+released to Rapier with the train's momentum, passengers are ejected, and wheel
+adhesion, rolling resistance and braking are applied as impulses on Sable's
+physics substeps. From that point the wreck moves only because Rapier says so.
 
 When a body has been quiet, upright and close to a track for long enough, the mod
 re-seeds the travelling points using Create's own `TrainMigration` and
-`TravellingPoint.migrateTo` API, restores `Train.graph`, and makes the contraption
-visible again. If the original graph no longer resolves, the mod looks for a
-straight edge long enough to hold the whole train.
+`TravellingPoint.migrateTo` API, restores `Train.graph`, and rebuilds the
+sub-levels at the train's new pose. If the original graph no longer resolves, the
+mod looks for a straight edge long enough to hold the whole train.
 
 ## Configuration
 
@@ -60,6 +71,7 @@ takes effect without restarting the world. Key groups:
 [general]
 enabled = true
 conversionMode = "THRESHOLD"   # THRESHOLD, ALWAYS, DISABLED
+convertOnAssembly = true       # a train is a Sable structure from the moment it exists
 maxActiveTrains = 10
 sessionTimeoutTicks = 12000
 
@@ -114,8 +126,8 @@ casings and train controls; server owners can override them with a datapack.
 - **Conversion needs clear space.** Blocks are only materialised into air. A train
   that derails inside terrain produces a partial wreck, and changes made to the
   wreck's block entities are not merged back into the contraption on resync.
-- **Passengers are ejected** at conversion time. They keep their inventory but do
-  not ride the physical body.
+- **Passengers are ejected** when a train derails. While it runs normally they stay
+  on the hidden contraption entity, so they are not pushed by the sub-level.
 - **Orientation at hand-off is upright.** The materialised blocks snap to the
   voxel grid, so a train that was pitched on a slope starts its rigid-body life
   axis-aligned. Rapier takes over rotation from there.

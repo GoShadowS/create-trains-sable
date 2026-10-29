@@ -1,6 +1,7 @@
 package dev.goshadows.createtrainssable.integration;
 
 import dev.goshadows.createtrainssable.physics.MassProperties;
+import dev.goshadows.createtrainssable.physics.Point3;
 import dev.goshadows.createtrainssable.physics.Pose;
 
 /** Opaque handle to one simulated carriage. The core never sees Sable classes. */
@@ -17,6 +18,15 @@ public interface AttachedBody {
      * stays authoritative for the body itself; the profile scales the wheel forces this mod adds.
      */
     void applyMassProfile(MassProperties properties);
+
+    /**
+     * Moves the body to a pose and clears its momentum. Used while Create still drives the train:
+     * the sub-level is the visible, colliding structure, but the kinematic train owns the path.
+     */
+    void follow(Pose pose);
+
+    /** Hands the body to the physics engine with the train's momentum. */
+    void launch(Point3 linearVelocity);
 
     void release(ReleaseReason reason);
 }

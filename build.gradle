@@ -34,6 +34,14 @@ repositories {
             includeGroup('dev.ryanhcode.sable-companion')
         }
     }
+    exclusiveContent {
+        forRepository {
+            maven { name = 'ModrinthMaven'; url = 'https://api.modrinth.com/maven' }
+        }
+        filter {
+            includeGroup('maven.modrinth')
+        }
+    }
 }
 
 // Mods needed only inside the development runs. They are not exported to
@@ -68,6 +76,12 @@ dependencies {
         exclude group: 'com.simibubi.create'
         exclude group: 'dev.ryanhcode.sable-companion'
     }
+
+    // Create: Aeronautics (needs Sable) is the reference implementation of a Sable structure that
+    // players already build against, so the compatibility code is compiled against it. It is
+    // never bundled and never a hard dependency: the mod runs with plain Create as well.
+    compileOnly("maven.modrinth:create-aeronautics:${aeronautics_version}") { transitive = false }
+    localRuntime("maven.modrinth:create-aeronautics:${aeronautics_version}") { transitive = false }
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

@@ -2,33 +2,41 @@ package dev.goshadows.createtrainssable.derailment;
 
 import com.simibubi.create.Create;
 import com.simibubi.create.content.trains.entity.Carriage;
+import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
 import com.simibubi.create.content.trains.entity.Train;
 import dev.goshadows.createtrainssable.CreateTrainsSable;
 import dev.goshadows.createtrainssable.CrashSignals;
 import dev.goshadows.createtrainssable.config.CTSConfig;
-import dev.goshadows.createtrainssable.conversion.CarriageMaterializer;
 import dev.goshadows.createtrainssable.conversion.TrainStateSnapshot;
-import dev.goshadows.createtrainssable.integration.AttachedBody;
-import dev.goshadows.createtrainssable.integration.ConversionRequest;
 import dev.goshadows.createtrainssable.integration.PhysicsBackend;
 import dev.goshadows.createtrainssable.integration.ReleaseReason;
 import dev.goshadows.createtrainssable.physics.DerailmentModel;
-import dev.goshadows.createtrainssable.physics.Pose;
 import dev.goshadows.createtrainssable.physics.Tuning;
 import net.minecraft.server.level.ServerLevel;
 
 import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Server-authoritative owner of the kinematic <-> rigid-body hand-off. */
+/**
+ * Server-authoritative owner of the train representation.
+ *
+ * <p>Every train that exists in the world is represented by Sable sub-levels: the mod adopts a
+ * train as soon as its carriages are present, hides Create's contraption entity and drives the
+ * sub-levels along the carriage path. A derailment switches that structure to free physics, and
+ * a settled wreck is handed back to Create's {@code TrackGraph}.</p>
+ */
 public final class DerailmentController {
 
+    /** Ticks between attempts to adopt a train whose carriages were not loaded yet. */
+    private static final int ADOPTION_RETRY_TICKS = 200;
+
     private final PhysicsBackend backend;
-    private final SessionRegistry sessions = new SessionRegistry();
+    private final Map<UUID, TrainStructure> structures = new LinkedHashMap<>();
+    private final Map<UUID, Integer> adoptionRetryAt = new HashMap<>();
     private final DerailmentMonitor monitor = new DerailmentMonitor();
     private boolean warnedAboutBackend;
 
@@ -38,37 +46,13 @@ public final class DerailmentController {
 
     public void tick(ServerLevel level, boolean trainsTickHere) {
         Tuning tuning = CTSConfig.snapshot();
-
-        Iterator<Map.Entry<UUID, PhysicsSession>> iterator = sessions.iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<UUID, PhysicsSession> entry = iterator.next();
-            if (!entry.getValue().tick(level, tuning)) {
-                monitor.forget(entry.getKey());
-                iterator.remove();
-            }
-        }
-
-        if (trainsTickHere) {
-            for (CrashSignals.Signal signal : CrashSignals.drain()) {
-                Train train = Create.RAILWAYS.trains.get(signal.trainId());
-                if (train == null || sessions.contains(train.id)) {
-                    continue;
-                }
-                DerailmentModel.Inputs inputs = new DerailmentModel.Inputs(signal.speed(),
-                        Double.POSITIVE_INFINITY, signal.speed(), 0.0, true);
-                DerailmentModel.Verdict verdict = DerailmentModel.evaluate(inputs, tuning);
-                if (verdict.derail()) {
-                    begin(level, train, signal.snapshot(), verdict, tuning, true);
-                }
-            }
-        }
-
-        if (!trainsTickHere || !tuning.general().enabled()) {
+        if (!tuning.general().enabled()) {
+            releaseAll(ReleaseReason.ABANDON);
             return;
         }
         if (!backend.isAvailable()) {
             if (!warnedAboutBackend) {
-                CreateTrainsSable.LOGGER.warn("Physics is enabled but no Sable backend is available: {}",
+                CreateTrainsSable.LOGGER.warn("No physics backend is available: {}",
                         backend.description());
                 warnedAboutBackend = true;
             }
@@ -76,97 +60,164 @@ public final class DerailmentController {
         }
 
         int tick = (int) (level.getGameTime() & 0x7fffffffL);
+        tickStructures(level, tuning, tick);
+
+        if (!trainsTickHere) {
+            return;
+        }
+
+        drainCrashSignals(level, tuning);
+        if (CTSConfig.convertOnAssembly()) {
+            adoptTrains(level, tuning, tick);
+        }
+        scanForDerailments(level, tuning, tick);
+    }
+
+    private void tickStructures(ServerLevel level, Tuning tuning, int tick) {
+        for (Map.Entry<UUID, TrainStructure> entry : new ArrayList<>(structures.entrySet())) {
+            TrainStructure structure = entry.getValue();
+            if (!structure.dimension().equals(level.dimension())) {
+                continue;
+            }
+            TrainStructure.Outcome outcome = structure.tick(level, tuning);
+            if (outcome == TrainStructure.Outcome.RESYNCED) {
+                structures.remove(entry.getKey());
+                Train train = Create.RAILWAYS.trains.get(entry.getKey());
+                if (train != null) {
+                    adopt(level, train, tuning, tick, "resynced");
+                }
+            } else if (outcome == TrainStructure.Outcome.ABANDONED) {
+                structures.remove(entry.getKey());
+                monitor.forget(entry.getKey());
+            }
+        }
+    }
+
+    /**
+     * Create keeps one Train object per assembled train, whether it was just built in a station
+     * or loaded from a save, so "has no structure yet" is the whole condition here.
+     */
+    private void adoptTrains(ServerLevel level, Tuning tuning, int tick) {
         for (Train train : new ArrayList<>(Create.RAILWAYS.trains.values())) {
-            if (sessions.contains(train.id) || CrashSignals.isConverting(train.id)) {
+            if (train.derailed || structures.containsKey(train.id) || CrashSignals.isConverting(train.id)) {
+                continue;
+            }
+            Integer retryAt = adoptionRetryAt.get(train.id);
+            if (retryAt != null && tick < retryAt) {
+                continue;
+            }
+            if (adopt(level, train, tuning, tick, "assembled")) {
+                adoptionRetryAt.remove(train.id);
+            } else {
+                adoptionRetryAt.put(train.id, tick + ADOPTION_RETRY_TICKS);
+            }
+        }
+    }
+
+    private boolean adopt(ServerLevel unusedLevel, Train train, Tuning tuning, int tick, String reason) {
+        ServerLevel level = levelOf(train);
+        if (level == null) {
+            CreateTrainsSable.LOGGER.debug("Train {} has no loaded carriage yet", train.id);
+            return false;
+        }
+        TrainStateSnapshot snapshot = TrainStateSnapshot.capture(train).orElse(null);
+        Optional<TrainStructure> structure = TrainStructure.attach(level, train, backend, tuning, snapshot);
+        if (structure.isEmpty()) {
+            CreateTrainsSable.LOGGER.debug("Train {} has no carriage that can become a sub-level yet",
+                    train.id);
+            return false;
+        }
+        structures.put(train.id, structure.get());
+        CreateTrainsSable.LOGGER.info("Train {} is now a Sable structure ({} sub-level(s), {})",
+                train.id, structure.get().bodyCount(), reason);
+        return true;
+    }
+
+    private void drainCrashSignals(ServerLevel level, Tuning tuning) {
+        for (CrashSignals.Signal signal : CrashSignals.drain()) {
+            Train train = Create.RAILWAYS.trains.get(signal.trainId());
+            if (train == null) {
+                continue;
+            }
+            ServerLevel carriageLevel = levelOf(train);
+            if (carriageLevel == null) {
+                continue;
+            }
+            TrainStructure existing = structures.get(signal.trainId());
+            if (existing != null) {
+                existing.derail(carriageLevel, train, DerailmentModel.Trigger.CREATE_CRASH,
+                        signal.speed(), tuning);
+                continue;
+            }
+            Optional<TrainStructure> structure =
+                    TrainStructure.attach(carriageLevel, train, backend, tuning, signal.snapshot());
+            structure.ifPresent(created -> {
+                structures.put(train.id, created);
+                created.derail(carriageLevel, train, DerailmentModel.Trigger.CREATE_CRASH,
+                        signal.speed(), tuning);
+            });
+        }
+    }
+
+    private void scanForDerailments(ServerLevel level, Tuning tuning, int tick) {
+        for (Train train : new ArrayList<>(Create.RAILWAYS.trains.values())) {
+            if (CrashSignals.isConverting(train.id)) {
                 continue;
             }
             Optional<DerailmentModel.Verdict> verdict = monitor.observe(train, tuning, tick);
             if (verdict.isEmpty()) {
                 continue;
             }
-            Optional<TrainStateSnapshot> snapshot = TrainStateSnapshot.capture(train);
-            if (snapshot.isPresent()) {
-                begin(level, train, snapshot.get(), verdict.get(), tuning, false);
+            DerailmentModel.Verdict result = verdict.get();
+            ServerLevel carriageLevel = levelOf(train);
+            if (carriageLevel == null) {
+                continue;
             }
+            TrainStructure structure = structures.get(train.id);
+            if (structure != null) {
+                structure.derail(carriageLevel, train, result.trigger(), result.speed(), tuning);
+                monitor.forget(train.id);
+                continue;
+            }
+
+            Optional<TrainStateSnapshot> snapshot = TrainStateSnapshot.capture(train);
+            if (snapshot.isEmpty()) {
+                continue;
+            }
+            Optional<TrainStructure> created =
+                    TrainStructure.attach(carriageLevel, train, backend, tuning, snapshot.get());
+            created.ifPresent(attached -> {
+                structures.put(train.id, attached);
+                attached.derail(carriageLevel, train, result.trigger(), result.speed(), tuning);
+                monitor.forget(train.id);
+            });
         }
     }
 
-    private void begin(ServerLevel level, Train train, TrainStateSnapshot snapshot,
-                       DerailmentModel.Verdict verdict, Tuning tuning, boolean alreadyCrashed) {
-        if (sessions.size() >= tuning.general().maxActiveTrains()) {
-            CreateTrainsSable.LOGGER.debug("Skipping conversion of train {}: {} sessions already active",
-                    train.id, sessions.size());
-            return;
+    /** A train can be anywhere; its own carriage entity knows which server level that is. */
+    private static ServerLevel levelOf(Train train) {
+        for (Carriage carriage : train.carriages) {
+            CarriageContraptionEntity entity = carriage.anyAvailableEntity();
+            if (entity != null && entity.level() instanceof ServerLevel level) {
+                return level;
+            }
         }
+        return null;
+    }
 
-        CrashSignals.beginConversion(train.id);
-        try {
-            List<AttachedBody> attached = new ArrayList<>();
-            List<CarriageMaterializer.Result> materialised = new ArrayList<>();
-            int carriageIndex = 0;
-            for (Carriage carriage : new ArrayList<>(train.carriages)) {
-                Optional<CarriageMaterializer.Result> result =
-                        CarriageMaterializer.materialize(level, carriage, tuning);
-                if (result.isEmpty()) {
-                    continue;
-                }
-                CarriageMaterializer.Result copy = result.get();
-                materialised.add(copy);
-                Pose pose = CarriageMaterializer.initialPose(carriage, train, verdict.speed());
-                ConversionRequest request = new ConversionRequest(level, train.id, carriageIndex++,
-                        copy.anchor(), copy.positions(), copy.massProperties(), pose, tuning);
-                backend.attach(request).ifPresent(body -> {
-                    body.applyMassProfile(copy.massProperties());
-                    attached.add(body);
-                });
-            }
-
-            if (attached.isEmpty()) {
-                for (CarriageMaterializer.Result copy : materialised) {
-                    CarriageMaterializer.rollback(level, copy.positions());
-                }
-                CreateTrainsSable.LOGGER.warn("No physics body could be created for train {}; "
-                        + "Create keeps full control", train.id);
-                return;
-            }
-
-            if (!alreadyCrashed) {
-                // Create's own crash() clears graph, marks the train derailed and updates status.
-                train.crash();
-            }
-            train.speed = 0.0;
-            for (Carriage carriage : train.carriages) {
-                carriage.forEachPresentEntity(entity -> {
-                    entity.ejectPassengers();
-                    entity.setInvisible(true);
-                });
-            }
-
-            PhysicsSession session = new PhysicsSession(level, train.id, snapshot, attached,
-                    verdict.trigger(), verdict.speed());
-            sessions.add(session);
-            monitor.forget(train.id);
-            CreateTrainsSable.LOGGER.info("Train {} handed to Rapier: trigger={}, speed={} m/s, bodies={}",
-                    train.id, verdict.trigger(), verdict.speed(), attached.size());
-        } finally {
-            CrashSignals.endConversion(train.id);
+    private void releaseAll(ReleaseReason reason) {
+        for (TrainStructure structure : new ArrayList<>(structures.values())) {
+            structure.release(reason);
         }
+        structures.clear();
+        adoptionRetryAt.clear();
+        monitor.clear();
     }
 
     public void onServerStopped() {
-        // The hidden contraption entities must be visible again next launch; wrecks are not
-        // re-adopted across a restart, and Sable sub-levels are removed here to avoid orphans.
-        for (PhysicsSession session : sessions.all()) {
-            Train train = Create.RAILWAYS.trains.get(session.trainId());
-            if (train != null) {
-                for (Carriage carriage : train.carriages) {
-                    carriage.forEachPresentEntity(entity -> entity.setInvisible(false));
-                }
-            }
-        }
-        sessions.clear(ReleaseReason.SERVER_STOP);
-        monitor.clear();
+        // Every sub-level is removed with the level; the contraption entities must be visible
+        // again so the next launch starts from Create's own state.
+        releaseAll(ReleaseReason.SERVER_STOP);
         CrashSignals.clear();
-        backend.shutdown();
     }
 }

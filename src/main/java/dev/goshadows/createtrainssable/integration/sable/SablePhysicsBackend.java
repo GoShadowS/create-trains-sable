@@ -33,9 +33,11 @@ import java.util.Optional;
  * Rapier-backed implementation. This class is loaded by name from BackendLoader, so it can
  * reference Sable's internal API freely without making Sable a hard runtime dependency.
  *
- * <p>Sable owns the body and its pose sync. This class supplies the initial velocity, adds
- * wheel forces on Sable's physics substeps and reads the resulting pose back for resync
- * decisions. It never teleports the body during a simulation.</p>
+ * <p>Sable owns the body and its pose sync. While Create still drives the train the body is
+ * teleported to the carriage every tick, so the train *is* a Sable structure: its blocks live in
+ * a plot, collide with the world and with entities, and are rendered by Sable. Once the train
+ * derails the body is released to Rapier with the train's momentum and this class only adds wheel
+ * forces on Sable's physics substeps.</p>
  */
 public final class SablePhysicsBackend implements PhysicsBackend {
 
@@ -61,11 +63,23 @@ public final class SablePhysicsBackend implements PhysicsBackend {
     public Optional<AttachedBody> attach(ConversionRequest request) {
         BoundingBox3i bounds = BoundingBox3i.from(request.worldPositions());
         if (bounds == null) {
+            LOGGER.warn("No bounds for carriage {} of train {}; nothing to assemble",
+                    request.carriageIndex(), request.trainId());
+            return Optional.empty();
+        }
+        if (SubLevelContainer.getContainer(request.level()) == null) {
+            LOGGER.warn("Level {} has no Sable sub-level container; cannot assemble train {}",
+                    request.level().dimension().location(), request.trainId());
             return Optional.empty();
         }
 
         ServerSubLevel subLevel = SubLevelAssemblyHelper.assembleBlocks(
                 request.level(), request.anchor(), request.worldPositions(), bounds.expand(1, 1, 1));
+        if (subLevel == null) {
+            LOGGER.warn("Sable returned no sub-level for carriage {} of train {}",
+                    request.carriageIndex(), request.trainId());
+            return Optional.empty();
+        }
 
         CompoundTag userData = new CompoundTag();
         userData.putUUID("TrainId", request.trainId());
@@ -74,20 +88,13 @@ public final class SablePhysicsBackend implements PhysicsBackend {
         subLevel.setName("cts-" + request.trainId().toString().substring(0, 8)
                 + "-" + request.carriageIndex());
 
+        // The body keeps the pose Sable assembled it with; TrainStructure reads that pose once
+        // and re-applies the offset between it and the carriage on every following tick.
         SableBody body = new SableBody(subLevel, request.massProperties(), request.tuning());
         bodies.put(body.id(), body);
 
-        RigidBodyHandle handle = RigidBodyHandle.of(subLevel);
-        if (handle != null && handle.isValid()) {
-            Point3 velocity = request.initialPose().linearVelocity();
-            handle.addLinearAndAngularVelocity(
-                    new Vector3d(velocity.x(), velocity.y(), velocity.z()), new Vector3d());
-        } else {
-            LOGGER.warn("Sub-level {} has no Rapier body; collision response will be kinematic", body.id());
-        }
-
-        LOGGER.info("Converted carriage {} of train {} into sub-level {}",
-                request.carriageIndex(), request.trainId(), body.id());
+        LOGGER.info("Assembled carriage {} of train {} as Sable sub-level {} ({} blocks)",
+                request.carriageIndex(), request.trainId(), body.id(), request.worldPositions().size());
         return Optional.of(body);
     }
 
@@ -107,6 +114,7 @@ public final class SablePhysicsBackend implements PhysicsBackend {
         private final ServerSubLevel subLevel;
         private final Tuning tuning;
         private MassProperties massProfile;
+        private boolean drivenByTrain;
 
         private SableBody(ServerSubLevel subLevel, MassProperties massProfile, Tuning tuning) {
             this.subLevel = subLevel;
@@ -142,13 +150,45 @@ public final class SablePhysicsBackend implements PhysicsBackend {
             return new Pose(
                     new Point3(position.x(), position.y(), position.z()),
                     new Quat(orientation.x(), orientation.y(), orientation.z(), orientation.w()),
-                    new Point3(linear.x(), linear.y(), linear.z()),
-                    new Point3(angular.x(), angular.y(), angular.z()));
+                    new Point3(linear.x, linear.y, linear.z),
+                    new Point3(angular.x, angular.y, angular.z));
         }
 
         @Override
         public void applyMassProfile(MassProperties properties) {
             this.massProfile = properties;
+        }
+
+        /**
+         * Kinematic follow. Rapier keeps the body awake but its momentum is cancelled every tick,
+         * so the sub-level tracks the carriage exactly instead of drifting off on its own.
+         */
+        @Override
+        public void follow(Pose pose) {
+            RigidBodyHandle handle = RigidBodyHandle.of(subLevel);
+            if (handle == null || !handle.isValid()) {
+                return;
+            }
+            drivenByTrain = true;
+            Vector3d linear = handle.getLinearVelocity(new Vector3d());
+            Vector3d angular = handle.getAngularVelocity(new Vector3d());
+            handle.addLinearAndAngularVelocity(linear.negate(), angular.negate());
+            handle.teleport(
+                    new Vector3d(pose.position().x(), pose.position().y(), pose.position().z()),
+                    new Quaterniond(pose.orientation().x(), pose.orientation().y(),
+                            pose.orientation().z(), pose.orientation().w()));
+        }
+
+        @Override
+        public void launch(Point3 linearVelocity) {
+            drivenByTrain = false;
+            RigidBodyHandle handle = RigidBodyHandle.of(subLevel);
+            if (handle == null || !handle.isValid()) {
+                return;
+            }
+            handle.addLinearAndAngularVelocity(
+                    new Vector3d(linearVelocity.x(), linearVelocity.y(), linearVelocity.z()),
+                    new Vector3d());
         }
 
         @Override
@@ -162,10 +202,14 @@ public final class SablePhysicsBackend implements PhysicsBackend {
         }
 
         /**
-         * Wheel forces are applied as impulses on the physics substep, not on the game tick:
-         * Sable runs several substeps per tick and resets queued forces in between.
+         * Wheel forces are applied on the physics substep, not on the game tick: Sable runs several
+         * substeps per tick and resets queued forces in between. A train that is still driven by
+         * Create gets no forces, or the two controllers would fight each other.
          */
         private void applyWheelForces(double timeStep) {
+            if (drivenByTrain) {
+                return;
+            }
             RigidBodyHandle handle = RigidBodyHandle.of(subLevel);
             if (handle == null || !handle.isValid()) {
                 return;
@@ -181,7 +225,7 @@ public final class SablePhysicsBackend implements PhysicsBackend {
                     new TractionModel.Demand(0.0, 1.0, speed, massProfile.mass()), tuning);
             double signedForce = rolling + brake.force();
             Vector3d impulse = new Vector3d(velocity).normalize().mul(signedForce * timeStep);
-            handle.applyImpulseAtPoint(subLevel.logicalPose().position(), impulse);
+            handle.applyLinearAndAngularImpulse(impulse, new Vector3d());
         }
     }
 }

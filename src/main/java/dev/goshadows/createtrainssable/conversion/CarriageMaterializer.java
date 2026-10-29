@@ -8,7 +8,6 @@ import dev.goshadows.createtrainssable.CreateTrainsSable;
 import dev.goshadows.createtrainssable.physics.MassProperties;
 import dev.goshadows.createtrainssable.physics.Point3;
 import dev.goshadows.createtrainssable.physics.Pose;
-import dev.goshadows.createtrainssable.physics.Quat;
 import dev.goshadows.createtrainssable.physics.Tuning;
 import dev.goshadows.createtrainssable.physics.WeightedBlock;
 import net.minecraft.core.BlockPos;
@@ -89,9 +88,27 @@ public final class CarriageMaterializer {
         if (positions.isEmpty()) {
             return Optional.empty();
         }
-        CreateTrainsSable.LOGGER.debug("Materialised {} blocks for carriage {}", positions.size(), carriage.id);
-        return Optional.of(new Result(BlockPos.containing(entity.getAnchorVec()), positions,
+        // Sable treats the anchor as the block that ends up at the centre of the new sub-level,
+        // so it has to be one of the blocks that are actually moved. The contraption anchor can
+        // sit in the air between two bogeys, which used to offset the whole wreck.
+        BlockPos anchor = nearestTo(entity.getAnchorVec(), positions);
+        CreateTrainsSable.LOGGER.debug("Materialised {} blocks for carriage {} around {}",
+                positions.size(), carriage.id, anchor);
+        return Optional.of(new Result(anchor, positions,
                 MassProperties.fromBlocks(weights, MassProperties.CUBE_INERTIA_FACTOR)));
+    }
+
+    private static BlockPos nearestTo(Vec3 target, List<BlockPos> positions) {
+        BlockPos best = positions.get(0);
+        double bestDistance = Double.POSITIVE_INFINITY;
+        for (BlockPos candidate : positions) {
+            double distance = target.distanceToSqr(Vec3.atCenterOf(candidate));
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = candidate;
+            }
+        }
+        return best;
     }
 
     /** Undo a materialisation when the backend refuses the conversion. */
@@ -101,17 +118,16 @@ public final class CarriageMaterializer {
         }
     }
 
-    /** Initial rigid-body velocity: Create's signed speed along the current track direction. */
-    public static Pose initialPose(Carriage carriage, Train train, double speedMetresPerSecond) {
-        Vec3 anchor = carriage.anyAvailableEntity() != null
-                ? carriage.anyAvailableEntity().position() : Vec3.ZERO;
+    /** Pose of a carriage as Create is currently drawing it, with the given linear velocity. */
+    public static Pose carriagePose(Carriage carriage, Train train, double speedMetresPerSecond) {
+        CarriageFrame frame = CarriageFrame.of(carriage);
         Vec3 direction = carriage.getLeadingPoint().edge != null
                 ? carriage.getLeadingPoint().edge.getDirection(true) : new Vec3(1.0, 0.0, 0.0);
-        if (train.speed < 0.0) {
+        if (train != null && train.speed < 0.0) {
             direction = direction.scale(-1.0);
         }
         direction = direction.normalize().scale(speedMetresPerSecond);
-        return new Pose(new Point3(anchor.x, anchor.y, anchor.z), Quat.IDENTITY,
+        return new Pose(frame.anchor(), frame.orientation(),
                 new Point3(direction.x, direction.y, direction.z), Point3.ZERO);
     }
 }

@@ -36,6 +36,7 @@ public final class CTSConfig {
     private static final ModConfigSpec.DoubleValue RESYNC_MAX_TRACK_DISTANCE;
     private static final ModConfigSpec.IntValue RESYNC_STABLE_TICKS;
 
+    private static final ModConfigSpec.BooleanValue CONVERT_ON_ASSEMBLY;
     private static final ModConfigSpec.BooleanValue SHOW_RAPIER_HITBOXES;
 
     static {
@@ -50,6 +51,10 @@ public final class CTSConfig {
                 .defineInRange("maxActiveTrains", 10, 1, 64);
         SESSION_TIMEOUT = builder.comment("Ticks before an unrecoverable wreck is abandoned.")
                 .defineInRange("sessionTimeoutTicks", 12000, 200, 200000);
+        CONVERT_ON_ASSEMBLY = builder.comment(
+                        "Represent every train as Sable sub-levels as soon as it exists, instead of waiting for a derailment.",
+                        "Disable this to keep Create's own contraption rendering until a train crashes.")
+                .define("convertOnAssembly", true);
         builder.pop();
 
         builder.comment("Wheel/rail contact. Mass is in Sable's kpg unit, forces in kpg*m/s^2.")
@@ -113,6 +118,11 @@ public final class CTSConfig {
     }
 
     private CTSConfig() {
+    }
+
+    /** True when assembled trains should be replaced by Sable structures straight away. */
+    public static boolean convertOnAssembly() {
+        return CONVERT_ON_ASSEMBLY.get();
     }
 
     public static Tuning snapshot() {

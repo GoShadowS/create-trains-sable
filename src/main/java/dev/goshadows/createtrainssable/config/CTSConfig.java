@@ -17,9 +17,6 @@ public final class CTSConfig {
     private static final ModConfigSpec.DoubleValue CONTACT_STIFFNESS;
     private static final ModConfigSpec.DoubleValue CONTACT_DAMPING;
     private static final ModConfigSpec.DoubleValue MAX_GUIDE;
-    private static final ModConfigSpec.DoubleValue ALIGN_GAIN;
-    private static final ModConfigSpec.DoubleValue ALIGN_DAMPING;
-    private static final ModConfigSpec.DoubleValue MAX_ANGULAR;
     private static final ModConfigSpec.DoubleValue MAX_LATERAL;
     private static final ModConfigSpec.DoubleValue MAX_VERTICAL;
     private static final ModConfigSpec.DoubleValue CURVE_LIMIT;
@@ -69,12 +66,6 @@ public final class CTSConfig {
                 .defineInRange("contactDamping", 24.0, 0.0, 500.0);
         MAX_GUIDE = builder.comment("Largest acceleration the wheel/rail contact may deliver, in m/s^2.")
                 .defineInRange("maxGuideAcceleration", 26.0, 0.1, 500.0);
-        ALIGN_GAIN = builder.comment("How strongly the vehicle is turned to follow the rail.")
-                .defineInRange("alignGain", 3.0, 0.0, 100.0);
-        ALIGN_DAMPING = builder.comment("Damping of that rotation, in 1/s.")
-                .defineInRange("alignDamping", 1.5, 0.0, 100.0);
-        MAX_ANGULAR = builder.comment("Largest angular acceleration the rails deliver, in rad/s^2.")
-                .defineInRange("maxAngularAcceleration", 8.0, 0.1, 100.0);
         MAX_LATERAL = builder.comment(
                         "Lateral distance from the rail head that still counts as on the rail, in blocks.",
                         "Beyond it the flange has climbed the rail: the truck stops guiding.")
@@ -131,7 +122,6 @@ public final class CTSConfig {
                 TRACTION.get(), BRAKE.get(), FRICTION.get(),
                 GUIDE_STIFFNESS.get(), GUIDE_DAMPING.get(),
                 CONTACT_STIFFNESS.get(), CONTACT_DAMPING.get(), MAX_GUIDE.get(),
-                ALIGN_GAIN.get(), ALIGN_DAMPING.get(), MAX_ANGULAR.get(),
                 MAX_LATERAL.get(), MAX_VERTICAL.get(), CURVE_LIMIT.get(),
                 SCAN_RADIUS.get(), RECHECK_TICKS.get(), ATTACH_TICKS.get(), ATTACH_RADIUS.get(),
                 COUPLING_RANGE.get(), COUPLING_STIFFNESS.get(), COUPLING_DAMPING.get(),

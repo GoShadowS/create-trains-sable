@@ -13,8 +13,10 @@ import dev.goshadows.createtrainssable.config.TruckSettings;
  *   <li><b>Pull or brake along the rail.</b> A driven axle tries to reach the speed its shaft asks
  *       for; an idler only rolls. Both are capped by the adhesion of the wheel, which is what makes
  *       a heavy train accelerate slowly instead of magically.</li>
- *   <li><b>Turn the body.</b> The axle steers the structure so its facing follows the tangent of the
- *       rail, which is what a bogey does mechanically.</li>
+ *   <li><b>Turn the body, indirectly.</b> The contact applies its force at the axle, not at the centre
+ *       of mass, so two axles that are pushed sideways in opposite directions yaw the structure the
+ *       way a bogie does. Nothing writes an angular velocity: an earlier version did, and the harness
+ *       measured the body spinning a half turn and then tumbling.</li>
  * </ol>
  *
  * <p>Everything is returned as an acceleration and a force, never as a velocity or a position: the
@@ -39,36 +41,32 @@ public final class WheelRail {
      * One substep of one axle.
      *
      * @param force              world force in newtons, to be applied at the axle
-     * @param angularAcceleration world angular acceleration in rad/s^2, to be applied to the body
      * @param state              whether the contact is holding the vehicle
      * @param lateralError       measured lateral error in blocks, for logging
      * @param verticalError      measured vertical error in blocks, for logging
      * @param longitudinalError  difference between the commanded and the actual speed, in m/s
      */
-    public record Output(Vec force, Vec angularAcceleration, State state, double lateralError,
-                         double verticalError, double longitudinalError) {
+    public record Output(Vec force, State state, double lateralError, double verticalError,
+                         double longitudinalError) {
 
         public boolean guiding() {
             return state == State.GUIDING;
         }
     }
 
-    private static final Output IDLE =
-            new Output(Vec.ZERO, Vec.ZERO, State.NO_TRACK, 0.0, 0.0, 0.0);
+    private static final Output IDLE = new Output(Vec.ZERO, State.NO_TRACK, 0.0, 0.0, 0.0);
 
     private WheelRail() {
     }
 
     public static Output idle(State state) {
-        return new Output(Vec.ZERO, Vec.ZERO, state, 0.0, 0.0, 0.0);
+        return new Output(Vec.ZERO, state, 0.0, 0.0, 0.0);
     }
 
     /**
      * @param track        the rail under the axle, or {@code null} when there is none
      * @param axle         world position of the axle
      * @param velocity     world velocity of the body at the axle
-     * @param forward      world direction the truck faces
-     * @param spin         world angular velocity of the body
      * @param targetSpeed  speed the shaft asks for, signed along the rail
      * @param driven       true for a traction truck
      * @param truckCount   trucks on the vehicle, for sharing the weight
@@ -78,7 +76,7 @@ public final class WheelRail {
      * @param secondsSinceAssembly how long ago the vehicle was assembled, for the attach window
      */
     @SuppressWarnings("checkstyle:ParameterNumber")
-    public static Output solve(RailFrame track, Vec axle, Vec velocity, Vec forward, Vec spin,
+    public static Output solve(RailFrame track, Vec axle, Vec velocity,
                                double targetSpeed, boolean driven, int truckCount, int drivenCount,
                                double mass, double gravity, double secondsSinceAssembly,
                                TruckSettings settings) {
@@ -100,11 +98,11 @@ public final class WheelRail {
                 && Math.abs(verticalError) <= settings.attachRadius();
 
         if (overspeed) {
-            return new Output(Vec.ZERO, Vec.ZERO, State.OVERSPEED, lateralError, verticalError,
+            return new Output(Vec.ZERO, State.OVERSPEED, lateralError, verticalError,
                     targetSpeed - along);
         }
         if (offRail && !attaching) {
-            return new Output(Vec.ZERO, Vec.ZERO, State.OFF_RAIL, lateralError, verticalError,
+            return new Output(Vec.ZERO, State.OFF_RAIL, lateralError, verticalError,
                     targetSpeed - along);
         }
 
@@ -151,30 +149,9 @@ public final class WheelRail {
         Vec force = support.scale(supportShare)
                 .add(track.tangent().scale(demand * mass / alongShare));
 
-        // 3. Steer the body along the rail. Each truck adds its own share of one correction, or a
-        // vehicle with six axles would turn six times as hard as a vehicle with one.
-        Vec angularAcceleration = alignment(forward, track.tangent(), spin, settings)
-                .scale(1.0 / Math.max(1, truckCount));
-
-        return new Output(force, angularAcceleration, State.GUIDING, lateralError, verticalError,
-                targetSpeed - along);
-    }
-
-    /** Angular acceleration that turns {@code forward} towards {@code wanted}, with damping. */
-    public static Vec alignment(Vec forward, Vec wanted, Vec spin, TruckSettings settings) {
-        if (forward.lengthSqr() < 1.0e-8) {
-            return Vec.ZERO;
-        }
-        Vec forwardUnit = forward.normalized();
-        double sign = forwardUnit.dot(wanted) >= 0.0 ? 1.0 : -1.0;
-        Vec axis = forwardUnit.cross(wanted.scale(sign));
-        Vec delta = axis.scale(settings.alignGain()).sub(spin.scale(settings.alignDamping()));
-        double limit = settings.maxAngularAcceleration();
-        double magnitude = delta.length();
-        if (magnitude > limit) {
-            delta = delta.scale(limit / magnitude);
-        }
-        return delta;
+        // 3. Nothing turns the body from here. The force above is applied at the axle, so a bogie
+        // that is pushed sideways at both ends produces the yaw itself.
+        return new Output(force, State.GUIDING, lateralError, verticalError, targetSpeed - along);
     }
 
     /** Speed a driven truck asks for, in m/s, from the shaft and the way the truck faces. */

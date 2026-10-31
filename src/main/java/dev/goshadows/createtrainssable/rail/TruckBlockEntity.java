@@ -104,8 +104,6 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         Vec axle = axlePosition(subLevel);
         Vector3dc rawVelocity = handle.getLinearVelocity(new Vector3d());
         Vec velocity = new Vec(rawVelocity.x(), rawVelocity.y(), rawVelocity.z());
-        Vector3dc rawSpin = handle.getAngularVelocity(new Vector3d());
-        Vec spin = new Vec(rawSpin.x(), rawSpin.y(), rawSpin.z());
 
         // Between searches the contact rides along the edge under the wheel.
         if (track != null) {
@@ -124,9 +122,8 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
                 ? WheelRail.targetSpeed(shaftSpeed, facingSign(), settings)
                 : 0.0;
 
-        WheelRail.Output output = WheelRail.solve(track, axle, velocity, forward(subLevel), spin,
-                target, isDriven(), trucks, driven, mass, gravity(subLevel, settings),
-                secondsSinceAssembly, settings);
+        WheelRail.Output output = WheelRail.solve(track, axle, velocity, target, isDriven(), trucks,
+                driven, mass, gravity(subLevel, settings), secondsSinceAssembly, settings);
         state = output.state();
         lastAxle = axle;
         lastSpeed = track == null ? 0.0 : track.speedAlong(velocity);
@@ -141,24 +138,25 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         }
     }
 
-    /** Turns the contact force into an impulse at the axle, and the steering into angular velocity. */
+    /**
+     * Turns the contact force into an impulse at the axle.
+     *
+     * <p>Only the axle is pushed. The torque that turns the vehicle towards the rail comes from the
+     * fact that the force is offset from the centre of mass, which is what a real bogie does; writing
+     * an angular velocity as well fought the solver, and the harness caught the body spinning.</p>
+     */
     private void apply(ServerSubLevel subLevel, RigidBodyHandle handle, Vec axle,
                        WheelRail.Output output, double timeStep) {
         Vec worldImpulse = output.force().scale(timeStep);
-        if (worldImpulse.lengthSqr() > 0.0) {
-            // The handle takes plot-local vectors: the pipeline rotates them by the body orientation.
-            Vector3d localImpulse = subLevel.logicalPose().transformNormalInverse(
-                    new Vector3d(worldImpulse.x(), worldImpulse.y(), worldImpulse.z()));
-            Vector3d axleInPlot = subLevel.logicalPose().transformPositionInverse(
-                    new Vector3d(axle.x(), axle.y(), axle.z()), new Vector3d());
-            handle.applyImpulseAtPoint(axleInPlot, localImpulse);
+        if (worldImpulse.lengthSqr() <= 0.0) {
+            return;
         }
-        Vec angular = output.angularAcceleration();
-        if (angular.lengthSqr() > 0.0) {
-            Vec delta = angular.scale(timeStep);
-            handle.addLinearAndAngularVelocity(new Vector3d(),
-                    new Vector3d(delta.x(), delta.y(), delta.z()));
-        }
+        // The handle takes plot-local vectors: the pipeline rotates them by the body orientation.
+        Vector3d localImpulse = subLevel.logicalPose().transformNormalInverse(
+                new Vector3d(worldImpulse.x(), worldImpulse.y(), worldImpulse.z()));
+        Vector3d axleInPlot = subLevel.logicalPose().transformPositionInverse(
+                new Vector3d(axle.x(), axle.y(), axle.z()), new Vector3d());
+        handle.applyImpulseAtPoint(axleInPlot, localImpulse);
     }
 
     /** World direction the truck faces: the axle runs across it. */

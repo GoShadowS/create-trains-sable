@@ -53,8 +53,7 @@ class WheelRailTest {
     @Test
     void anAxleOnTheRailIsGuided() {
         WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
-                new Vec(1, 0, 0), Vec.ZERO, 0.0, true, 2, 1, 100.0, SETTINGS.gravity(), 1.0,
-                SETTINGS);
+                Vec.ZERO, 0.0, true, 2, 1, 100.0, SETTINGS.gravity(), 1.0, SETTINGS);
         assertTrue(output.guiding(), "an axle in the middle of the rail must hold");
     }
 
@@ -62,8 +61,7 @@ class WheelRailTest {
     void anAxleBeyondTheFlangeStopsGuiding() {
         Vec far = new Vec(0, 0, SETTINGS.maxLateralError() + 0.5);
         WheelRail.Output output = WheelRail.solve(straightRail(), far, Vec.ZERO,
-                new Vec(1, 0, 0), Vec.ZERO, 0.0, true, 2, 1, 100.0, SETTINGS.gravity(), 10.0,
-                SETTINGS);
+                Vec.ZERO, 0.0, true, 2, 1, 100.0, SETTINGS.gravity(), 10.0, SETTINGS);
         assertFalse(output.guiding());
         assertEquals(WheelRail.State.OFF_RAIL, output.state());
     }
@@ -73,8 +71,7 @@ class WheelRailTest {
         // Same offset as the failing case, but inside the window that follows assembly.
         Vec offset = new Vec(0, 0, SETTINGS.maxLateralError() + 0.5);
         WheelRail.Output output = WheelRail.solve(straightRail(), offset, Vec.ZERO,
-                new Vec(1, 0, 0), Vec.ZERO, 0.0, true, 2, 1, 100.0, SETTINGS.gravity(), 0.1,
-                SETTINGS);
+                Vec.ZERO, 0.0, true, 2, 1, 100.0, SETTINGS.gravity(), 0.1, SETTINGS);
         assertTrue(output.guiding(), "the attach window must accept an axle that is not settled yet");
         assertTrue(output.force().z() < 0.0, "the flange must push towards the rail, not away");
     }
@@ -84,8 +81,8 @@ class WheelRailTest {
         double curvature = SETTINGS.curveLateralLimit();
         double tooFast = Math.sqrt(SETTINGS.curveLateralLimit() / curvature) + 1.0;
         WheelRail.Output output = WheelRail.solve(curvedRail(curvature), Vec.ZERO,
-                new Vec(tooFast, 0, 0), new Vec(1, 0, 0), Vec.ZERO, tooFast, true, 2, 1, 100.0,
-                SETTINGS.gravity(), 10.0, SETTINGS);
+                new Vec(tooFast, 0, 0), tooFast, true, 2, 1, 100.0, SETTINGS.gravity(), 10.0,
+                SETTINGS);
         assertFalse(output.guiding());
         assertEquals(WheelRail.State.OVERSPEED, output.state());
     }
@@ -94,8 +91,7 @@ class WheelRailTest {
     void tractionIsCappedByAdhesion() {
         // Demand far above what the wheel can transmit: 32 RPM is 1.6 m/s, the vehicle is still.
         WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
-                new Vec(1, 0, 0), Vec.ZERO, 30.0, true, 1, 1, 1000.0, SETTINGS.gravity(),
-                10.0, SETTINGS);
+                Vec.ZERO, 30.0, true, 1, 1, 1000.0, SETTINGS.gravity(), 10.0, SETTINGS);
         double adhesion = SETTINGS.friction() * SETTINGS.gravity();
         assertTrue(output.force().x() <= 1000.0 * adhesion + 1.0e-6,
                 "the wheel cannot push harder than it grips");
@@ -104,8 +100,7 @@ class WheelRailTest {
     @Test
     void anIdlerNeverPulls() {
         WheelRail.Output standing = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
-                new Vec(1, 0, 0), Vec.ZERO, 30.0, false, 2, 1, 1000.0, SETTINGS.gravity(),
-                10.0, SETTINGS);
+                Vec.ZERO, 30.0, false, 2, 1, 1000.0, SETTINGS.gravity(), 10.0, SETTINGS);
         assertTrue(standing.force().x() <= 0.0, "a rolling truck may only resist motion");
     }
 
@@ -115,8 +110,7 @@ class WheelRailTest {
         double mass = 400.0;
         for (int trucks : new int[] {1, 2, 4, 6}) {
             WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
-                    new Vec(1, 0, 0), Vec.ZERO, 0.0, false, trucks, 0, mass, SETTINGS.gravity(),
-                    10.0, SETTINGS);
+                    Vec.ZERO, 0.0, false, trucks, 0, mass, SETTINGS.gravity(), 10.0, SETTINGS);
             double expected = mass * SETTINGS.gravity();
             assertEquals(expected, output.force().y() * trucks, expected * 1.0e-6,
                     trucks + " axles must carry the weight between them, not once each");
@@ -130,8 +124,7 @@ class WheelRailTest {
         // the body climbed off the rail.
         double mass = 400.0;
         WheelRail.Output driven = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
-                new Vec(1, 0, 0), Vec.ZERO, 0.0, true, 2, 1, mass, SETTINGS.gravity(), 10.0,
-                SETTINGS);
+                Vec.ZERO, 0.0, true, 2, 1, mass, SETTINGS.gravity(), 10.0, SETTINGS);
         assertEquals(mass * SETTINGS.gravity() / 2.0, driven.force().y(), mass * 1.0e-6,
                 "a driven axle carries half the weight, not all of it");
     }
@@ -144,7 +137,7 @@ class WheelRailTest {
         double expected = mass * Math.min(SETTINGS.traction(), SETTINGS.friction() * SETTINGS.gravity());
         for (int driven : new int[] {1, 2, 4}) {
             WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
-                    new Vec(1, 0, 0), Vec.ZERO, 30.0, true, driven, driven, mass,
+                    Vec.ZERO, 30.0, true, driven, driven, mass,
                     SETTINGS.gravity(), 10.0, SETTINGS);
             assertEquals(expected, output.force().x() * driven, expected * 1.0e-6,
                     "traction must not depend on how many axles are driven");
@@ -159,7 +152,7 @@ class WheelRailTest {
         int trucks = 1;
         for (int pass = 0; pass < 2; pass++) {
             WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO,
-                    new Vec(5, 0, 0), new Vec(1, 0, 0), Vec.ZERO, 0.0, false, trucks, 0, mass,
+                    new Vec(5, 0, 0), 0.0, false, trucks, 0, mass,
                     SETTINGS.gravity(), 10.0, SETTINGS);
             if (pass == 0) {
                 totalOne = output.force().x();
@@ -174,30 +167,10 @@ class WheelRailTest {
     }
 
     @Test
-    void steeringIsSharedBetweenAxles() {
-        Vec forward = new Vec(0, 0, 1);
-        double one = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO, forward, Vec.ZERO, 0.0,
-                false, 1, 0, 100.0, SETTINGS.gravity(), 10.0, SETTINGS).angularAcceleration().length();
-        double four = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO, forward, Vec.ZERO, 0.0,
-                false, 4, 0, 100.0, SETTINGS.gravity(), 10.0, SETTINGS)
-                .angularAcceleration().length() * 4.0;
-        assertEquals(one, four, one * 1.0e-6, "four axles must turn the body once, not four times");
-    }
-
-    @Test
     void targetSpeedFollowsTheShaftAndTheFacing() {
         assertEquals(1.6, WheelRail.targetSpeed(32.0f, 1.0, SETTINGS), 1.0e-9);
         assertEquals(-1.6, WheelRail.targetSpeed(32.0f, -1.0, SETTINGS), 1.0e-9);
         assertEquals(0.0, WheelRail.targetSpeed(0.0f, 1.0, SETTINGS), 1.0e-9);
     }
 
-    @Test
-    void alignmentTurnsTheShortWayRound() {
-        Vec forward = new Vec(0, 0, 1);
-        Vec wanted = new Vec(1, 0, 0);
-        Vec delta = WheelRail.alignment(forward, wanted, Vec.ZERO, SETTINGS);
-        // Rotating (0,0,1) towards (1,0,0) is a positive rotation about +Y.
-        assertTrue(delta.y() > 0.0, "the body must turn towards the rail, not away from it");
-        assertTrue(delta.length() <= SETTINGS.maxAngularAcceleration() + 1.0e-9);
-    }
 }

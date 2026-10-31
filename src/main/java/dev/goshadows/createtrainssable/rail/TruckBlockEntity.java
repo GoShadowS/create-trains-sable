@@ -47,6 +47,8 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     private WheelRail.State loggedState = WheelRail.State.NO_TRACK;
     /** Shaft speed forced by the physics harness; {@code null} in a normal game. */
     private Float forcedSpeed;
+    /** Last force this axle asked for; read by the harness. */
+    private Vec lastForce = Vec.ZERO;
 
     public TruckBlockEntity(BlockPos pos, BlockState state) {
         super(CTSBlockEntities.TRUCK.get(), pos, state);
@@ -130,6 +132,7 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         lastSpeed = track == null ? 0.0 : track.speedAlong(velocity);
         lastLateralError = output.lateralError();
 
+        lastForce = output.guiding() ? output.force() : Vec.ZERO;
         if (output.guiding()) {
             apply(subLevel, handle, axle, output, timeStep);
         }
@@ -242,6 +245,16 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
      */
     public void selfTestSpeed(Float rpm) {
         this.forcedSpeed = rpm;
+    }
+
+    /** The force this axle asked for on the last physics tick; used by the harness. */
+    public Vec lastForce() {
+        return lastForce;
+    }
+
+    /** Sideways error of this axle on the last physics tick, in blocks; used by the harness. */
+    public double lastLateralError() {
+        return lastLateralError;
     }
 
     /** Current contact state of this axle; used by diagnostics and by tests. */

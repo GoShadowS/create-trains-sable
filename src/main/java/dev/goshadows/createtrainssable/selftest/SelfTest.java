@@ -334,6 +334,8 @@ public final class SelfTest {
             worstLateral = Math.max(worstLateral, rig.lateralError());
             if (ticks % 10 == 0) {
                 log("lateral=" + f(rig.lateralError())
+                        + " yaw=" + f(rig.yawDegrees())
+                        + " fz=" + f(rig.truckForce().z())
                         + " vz=" + f(rig.velocity().z())
                         + " vx=" + f(rig.velocity().x())
                         + " y=" + f(axle().y())
@@ -498,6 +500,8 @@ public final class SelfTest {
             }
             if (ticks % 10 == 0 && ticks >= 20) {
                 log("lateral=" + f(rig.lateralError())
+                        + " yaw=" + f(rig.yawDegrees())
+                        + " fz=" + f(rig.truckForce().z())
                         + " vz=" + f(rig.velocity().z())
                         + " y=" + f(axle().y())
                         + " " + states());

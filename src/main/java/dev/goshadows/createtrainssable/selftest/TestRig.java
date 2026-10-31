@@ -27,6 +27,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -248,6 +249,17 @@ final class TestRig {
             container.removeSubLevel(body, SubLevelRemovalReason.REMOVED);
         }
         Create.RAILWAYS.removeGraph(graph);
+    }
+
+    /** Yaw of the body in degrees; a body that is turning instead of moving shows up here. */
+    double yawDegrees() {
+        Vector3f euler = body.logicalPose().orientation().getEulerAnglesYXZ(new Vector3f());
+        return Math.toDegrees(euler.y);
+    }
+
+    /** Force the first truck asked for on its last physics tick. */
+    Vec truckForce() {
+        return trucks.isEmpty() ? Vec.ZERO : trucks.get(0).lastForce();
     }
 
     /** True once the engine has dropped the body; a scenario that sees this has a bug to report. */

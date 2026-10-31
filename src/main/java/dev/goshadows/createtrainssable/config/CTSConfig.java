@@ -1,6 +1,6 @@
 package dev.goshadows.createtrainssable.config;
 
-import dev.goshadows.createtrainssable.bogey.BogeySettings;
+import dev.goshadows.createtrainssable.rail.TruckSettings;
 import dev.goshadows.createtrainssable.physics.Tuning;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -46,32 +46,32 @@ public final class CTSConfig {
     private static final ModConfigSpec.DoubleValue RAIL_ANGULAR_VELOCITY_GAIN;
     private static final ModConfigSpec.DoubleValue RAIL_MAX_ANGULAR_ACCELERATION;
     private static final ModConfigSpec.DoubleValue RAIL_ANGLE_TOLERANCE;
-    private static final ModConfigSpec.BooleanValue COUPLING_ENABLED;
-    private static final ModConfigSpec.DoubleValue COUPLING_STIFFNESS;
-    private static final ModConfigSpec.DoubleValue COUPLING_DAMPING;
-    private static final ModConfigSpec.DoubleValue COUPLING_MAX_ACCELERATION;
+    private static final ModConfigSpec.BooleanValue RAILS_COUPLING_ENABLED;
+    private static final ModConfigSpec.DoubleValue RAILS_COUPLING_STIFFNESS;
+    private static final ModConfigSpec.DoubleValue RAILS_COUPLING_DAMPING;
+    private static final ModConfigSpec.DoubleValue RAILS_COUPLING_MAX_ACCELERATION;
     private static final ModConfigSpec.DoubleValue RAIL_LATERAL_TOLERANCE;
     private static final ModConfigSpec.IntValue RAIL_TOLERANCE_TICKS;
 
     private static final ModConfigSpec.BooleanValue CONVERT_TRAINS;
-    private static final ModConfigSpec.DoubleValue BOGEY_SPEED_PER_RPM;
-    private static final ModConfigSpec.DoubleValue BOGEY_TRACTION;
-    private static final ModConfigSpec.DoubleValue BOGEY_BRAKE;
-    private static final ModConfigSpec.DoubleValue BOGEY_GUIDE_STIFFNESS;
-    private static final ModConfigSpec.DoubleValue BOGEY_GUIDE_DAMPING;
-    private static final ModConfigSpec.DoubleValue BOGEY_MAX_GUIDE;
-    private static final ModConfigSpec.DoubleValue BOGEY_ALIGN_GAIN;
-    private static final ModConfigSpec.DoubleValue BOGEY_ALIGN_DAMPING;
-    private static final ModConfigSpec.DoubleValue BOGEY_MAX_ANGULAR;
-    private static final ModConfigSpec.DoubleValue BOGEY_MAX_LATERAL;
-    private static final ModConfigSpec.DoubleValue BOGEY_MAX_VERTICAL;
-    private static final ModConfigSpec.DoubleValue BOGEY_CURVE_LIMIT;
-    private static final ModConfigSpec.DoubleValue BOGEY_SCAN_RADIUS;
-    private static final ModConfigSpec.IntValue BOGEY_RECHECK_TICKS;
-    private static final ModConfigSpec.DoubleValue COUPLER_RANGE;
-    private static final ModConfigSpec.DoubleValue COUPLER_STIFFNESS;
-    private static final ModConfigSpec.DoubleValue COUPLER_DAMPING;
-    private static final ModConfigSpec.DoubleValue COUPLER_MAX_ACCELERATION;
+    private static final ModConfigSpec.DoubleValue TRUCK_SPEED_PER_RPM;
+    private static final ModConfigSpec.DoubleValue TRUCK_TRACTION;
+    private static final ModConfigSpec.DoubleValue TRUCK_BRAKE;
+    private static final ModConfigSpec.DoubleValue TRUCK_GUIDE_STIFFNESS;
+    private static final ModConfigSpec.DoubleValue TRUCK_GUIDE_DAMPING;
+    private static final ModConfigSpec.DoubleValue TRUCK_MAX_GUIDE;
+    private static final ModConfigSpec.DoubleValue TRUCK_ALIGN_GAIN;
+    private static final ModConfigSpec.DoubleValue TRUCK_ALIGN_DAMPING;
+    private static final ModConfigSpec.DoubleValue TRUCK_MAX_ANGULAR;
+    private static final ModConfigSpec.DoubleValue TRUCK_MAX_LATERAL;
+    private static final ModConfigSpec.DoubleValue TRUCK_MAX_VERTICAL;
+    private static final ModConfigSpec.DoubleValue TRUCK_CURVE_LIMIT;
+    private static final ModConfigSpec.DoubleValue TRUCK_SCAN_RADIUS;
+    private static final ModConfigSpec.IntValue TRUCK_RECHECK_TICKS;
+    private static final ModConfigSpec.DoubleValue COUPLING_RANGE;
+    private static final ModConfigSpec.DoubleValue COUPLING_STIFFNESS;
+    private static final ModConfigSpec.DoubleValue COUPLING_DAMPING;
+    private static final ModConfigSpec.DoubleValue COUPLING_MAX_ACCELERATION;
 
     private static final ModConfigSpec.BooleanValue CONVERT_ON_ASSEMBLY;
     private static final ModConfigSpec.BooleanValue SHOW_RAPIER_HITBOXES;
@@ -90,7 +90,7 @@ public final class CTSConfig {
                 .defineInRange("sessionTimeoutTicks", 12000, 200, 200000);
         CONVERT_TRAINS = builder.comment(
                         "Replace Create trains with Sable structures (the old behaviour).",
-                        "Off by default: trains are now built out of physics bogeys instead, which needs no",
+                        "Off by default: vehicles are now built out of rail trucks instead, which needs no",
                         "conversion and cannot produce a second copy of the train.")
                 .define("convertCreateTrains", false);
         CONVERT_ON_ASSEMBLY = builder.comment(
@@ -178,13 +178,15 @@ public final class CTSConfig {
                 .defineInRange("maxAngularAcceleration", 12.0, 0.1, 500.0);
         RAIL_ANGLE_TOLERANCE = builder.comment("Orientation error in radians above which the rails count as overloaded.")
                 .defineInRange("angleTolerance", 0.35, 0.0, 3.1415);
-        COUPLING_ENABLED = builder.comment("Couple neighbouring carriages with a spring and damper.")
+        RAILS_COUPLING_ENABLED = builder.comment(
+                        "Couple the carriages of a converted train with a spring and damper.")
                 .define("coupling", true);
-        COUPLING_STIFFNESS = builder.comment("Coupler stiffness in 1/s^2 per block of extension.")
+        RAILS_COUPLING_STIFFNESS = builder.comment("Coupling stiffness in 1/s^2 per block of extension.")
                 .defineInRange("couplingStiffness", 8.0, 0.0, 10000.0);
-        COUPLING_DAMPING = builder.comment("Coupler damping in 1/s.")
+        RAILS_COUPLING_DAMPING = builder.comment("Coupling damping in 1/s.")
                 .defineInRange("couplingDamping", 4.0, 0.0, 10000.0);
-        COUPLING_MAX_ACCELERATION = builder.comment("Strongest acceleration a coupler may transfer, in m/s^2.")
+        RAILS_COUPLING_MAX_ACCELERATION = builder.comment(
+                        "Strongest acceleration a coupling may transfer, in m/s^2.")
                 .defineInRange("couplingMaxAcceleration", 20.0, 0.0, 500.0);
         RAIL_LATERAL_TOLERANCE = builder.comment("Distance from the ideal carriage pose that counts as leaving the rails, in blocks.")
                 .defineInRange("lateralTolerance", 1.5, 0.0, 16.0);
@@ -193,54 +195,54 @@ public final class CTSConfig {
         builder.pop();
 
         builder.comment(
-                        "Physics bogeys: a Sable vehicle on Create rails.",
-                        "Build the vehicle, put bogeys under it, assemble it, drive it with a shaft.")
-                .push("bogey");
-        BOGEY_SPEED_PER_RPM = builder.comment(
+                        "Rail trucks: the blocks that put a Sable vehicle on Create rails.",
+                        "Build the vehicle, put trucks under it, assemble it, drive it with a shaft.")
+                .push("trucks");
+        TRUCK_SPEED_PER_RPM = builder.comment(
                         "Metres per second of target speed per RPM of the driving shaft.",
                         "32 RPM therefore means about 1.6 blocks per second with the default value.")
                 .defineInRange("speedPerRpm", 0.05, 0.0, 5.0);
-        BOGEY_TRACTION = builder.comment("Acceleration the driven wheels can put down, in m/s^2.")
+        TRUCK_TRACTION = builder.comment("Acceleration the driven wheels can put down, in m/s^2.")
                 .defineInRange("tractionAcceleration", 1.2, 0.0, 100.0);
-        BOGEY_BRAKE = builder.comment("Acceleration the brakes can remove, in m/s^2.")
+        TRUCK_BRAKE = builder.comment("Acceleration the brakes can remove, in m/s^2.")
                 .defineInRange("brakeAcceleration", 1.6, 0.0, 100.0);
-        BOGEY_GUIDE_STIFFNESS = builder.comment("How firmly the axle is held on the rail, in 1/s^2.")
+        TRUCK_GUIDE_STIFFNESS = builder.comment("How firmly the axle is held on the rail, in 1/s^2.")
                 .defineInRange("guideStiffness", 18.0, 0.0, 500.0);
-        BOGEY_GUIDE_DAMPING = builder.comment("Damping of the axle on the rail, in 1/s.")
+        TRUCK_GUIDE_DAMPING = builder.comment("Damping of the axle on the rail, in 1/s.")
                 .defineInRange("guideDamping", 6.0, 0.0, 200.0);
-        BOGEY_MAX_GUIDE = builder.comment("Largest acceleration the rail contact may deliver, in m/s^2.")
+        TRUCK_MAX_GUIDE = builder.comment("Largest acceleration the rail contact may deliver, in m/s^2.")
                 .defineInRange("maxGuideAcceleration", 26.0, 0.1, 500.0);
-        BOGEY_ALIGN_GAIN = builder.comment("How strongly the vehicle is turned to follow the rail.")
+        TRUCK_ALIGN_GAIN = builder.comment("How strongly the vehicle is turned to follow the rail.")
                 .defineInRange("alignGain", 3.0, 0.0, 100.0);
-        BOGEY_ALIGN_DAMPING = builder.comment("Damping of that rotation, in 1/s.")
+        TRUCK_ALIGN_DAMPING = builder.comment("Damping of that rotation, in 1/s.")
                 .defineInRange("alignDamping", 1.5, 0.0, 100.0);
-        BOGEY_MAX_ANGULAR = builder.comment("Largest angular acceleration the rails deliver, in rad/s^2.")
+        TRUCK_MAX_ANGULAR = builder.comment("Largest angular acceleration the rails deliver, in rad/s^2.")
                 .defineInRange("maxAngularAcceleration", 8.0, 0.1, 100.0);
-        BOGEY_MAX_LATERAL = builder.comment(
+        TRUCK_MAX_LATERAL = builder.comment(
                         "Lateral distance from the rail that still counts as on the rail, in blocks.",
-                        "Beyond it the bogey is off the track and the vehicle is a wreck.")
+                        "Beyond it the truck is off the track and the vehicle is a wreck.")
                 .defineInRange("maxLateralError", 1.2, 0.05, 8.0);
-        BOGEY_MAX_VERTICAL = builder.comment(
+        TRUCK_MAX_VERTICAL = builder.comment(
                         "Vertical distance from the rail head that still counts as on the rail.")
                 .defineInRange("maxVerticalError", 0.9, 0.05, 8.0);
-        BOGEY_CURVE_LIMIT = builder.comment(
+        TRUCK_CURVE_LIMIT = builder.comment(
                         "Lateral acceleration the flanges can take before the vehicle leaves the rail, in m/s^2.",
                         "This is what makes a curve taken too fast derail instead of holding.")
                 .defineInRange("curveLateralLimit", 2.6, 0.1, 100.0);
-        BOGEY_SCAN_RADIUS = builder.comment("How far to look for track around a bogey, in blocks.")
+        TRUCK_SCAN_RADIUS = builder.comment("How far to look for track around a truck, in blocks.")
                 .defineInRange("scanRadius", 24.0, 2.0, 128.0);
-        BOGEY_RECHECK_TICKS = builder.comment("Ticks between track lookups; physics runs faster than this.")
+        TRUCK_RECHECK_TICKS = builder.comment("Ticks between track lookups; physics runs faster than this.")
                 .defineInRange("trackRecheckTicks", 2, 1, 40);
-        COUPLER_RANGE = builder.comment(
-                        "Distance within which two couplers facing each other link, in blocks.")
-                .defineInRange("couplerRange", 2.5, 0.5, 16.0);
-        COUPLER_STIFFNESS = builder.comment("Coupler stiffness in 1/s^2 per block of extension.")
-                .defineInRange("couplerStiffness", 6.0, 0.0, 200.0);
-        COUPLER_DAMPING = builder.comment("Coupler damping in 1/s.")
-                .defineInRange("couplerDamping", 4.0, 0.0, 200.0);
-        COUPLER_MAX_ACCELERATION = builder.comment(
+        COUPLING_RANGE = builder.comment(
+                        "Distance within which two spring couplings facing each other link, in blocks.")
+                .defineInRange("couplingRange", 2.5, 0.5, 16.0);
+        COUPLING_STIFFNESS = builder.comment("Coupling stiffness in 1/s^2 per block of extension.")
+                .defineInRange("couplingStiffness", 6.0, 0.0, 200.0);
+        COUPLING_DAMPING = builder.comment("Coupling damping in 1/s.")
+                .defineInRange("couplingDamping", 4.0, 0.0, 200.0);
+        COUPLING_MAX_ACCELERATION = builder.comment(
                         "Strongest acceleration a coupler may transfer, in m/s^2.")
-                .defineInRange("couplerMaxAcceleration", 14.0, 0.0, 200.0);
+                .defineInRange("couplingMaxAcceleration", 14.0, 0.0, 200.0);
         builder.pop();
 
         builder.comment("Diagnostics.").push("debug");
@@ -260,15 +262,15 @@ public final class CTSConfig {
         return CONVERT_TRAINS.get();
     }
 
-    /** Bogey and coupler tuning, read on every physics tick. */
-    public static BogeySettings bogey() {
-        return new BogeySettings(
-                BOGEY_SPEED_PER_RPM.get(), BOGEY_TRACTION.get(), BOGEY_BRAKE.get(),
-                BOGEY_GUIDE_STIFFNESS.get(), BOGEY_GUIDE_DAMPING.get(), BOGEY_MAX_GUIDE.get(),
-                BOGEY_ALIGN_GAIN.get(), BOGEY_ALIGN_DAMPING.get(), BOGEY_MAX_ANGULAR.get(),
-                BOGEY_MAX_LATERAL.get(), BOGEY_MAX_VERTICAL.get(), BOGEY_CURVE_LIMIT.get(),
-                BOGEY_SCAN_RADIUS.get(), BOGEY_RECHECK_TICKS.get(), COUPLER_RANGE.get(),
-                COUPLER_STIFFNESS.get(), COUPLER_DAMPING.get(), COUPLER_MAX_ACCELERATION.get(),
+    /** Truck and coupling tuning, read on every physics tick. */
+    public static TruckSettings trucks() {
+        return new TruckSettings(
+                TRUCK_SPEED_PER_RPM.get(), TRUCK_TRACTION.get(), TRUCK_BRAKE.get(),
+                TRUCK_GUIDE_STIFFNESS.get(), TRUCK_GUIDE_DAMPING.get(), TRUCK_MAX_GUIDE.get(),
+                TRUCK_ALIGN_GAIN.get(), TRUCK_ALIGN_DAMPING.get(), TRUCK_MAX_ANGULAR.get(),
+                TRUCK_MAX_LATERAL.get(), TRUCK_MAX_VERTICAL.get(), TRUCK_CURVE_LIMIT.get(),
+                TRUCK_SCAN_RADIUS.get(), TRUCK_RECHECK_TICKS.get(), COUPLING_RANGE.get(),
+                COUPLING_STIFFNESS.get(), COUPLING_DAMPING.get(), COUPLING_MAX_ACCELERATION.get(),
                 GRAVITY.get()).validated();
     }
 
@@ -289,8 +291,9 @@ public final class CTSConfig {
                 new Tuning.Rails(PHYSICAL_RAILS.get(), RAIL_POSITION_GAIN.get(), RAIL_VELOCITY_GAIN.get(),
                         RAIL_MAX_ACCELERATION.get(), RAIL_ANGULAR_GAIN.get(),
                         RAIL_ANGULAR_VELOCITY_GAIN.get(), RAIL_MAX_ANGULAR_ACCELERATION.get(),
-                        RAIL_ANGLE_TOLERANCE.get(), COUPLING_ENABLED.get(), COUPLING_STIFFNESS.get(),
-                        COUPLING_DAMPING.get(), COUPLING_MAX_ACCELERATION.get(),
+                        RAIL_ANGLE_TOLERANCE.get(), RAILS_COUPLING_ENABLED.get(),
+                        RAILS_COUPLING_STIFFNESS.get(), RAILS_COUPLING_DAMPING.get(),
+                        RAILS_COUPLING_MAX_ACCELERATION.get(),
                         RAIL_LATERAL_TOLERANCE.get(), RAIL_TOLERANCE_TICKS.get()),
                 new Tuning.Rebinding(RESYNC_MAX_SPEED.get(), RESYNC_MAX_ANGULAR_SPEED.get(),
                         RESYNC_MAX_TILT.get(), RESYNC_MAX_TRACK_DISTANCE.get(), RESYNC_STABLE_TICKS.get(),

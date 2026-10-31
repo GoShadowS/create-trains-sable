@@ -1,0 +1,70 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {},
+  "elements": [
+    {
+      "from": [
+        2,
+        2,
+        5
+      ],
+      "to": [
+        14,
+        10,
+        11
+      ],
+      "faces": {
+        "north": {
+          "texture": "createtrainssable:block/coupling_plate"
+        },
+        "south": {
+          "texture": "createtrainssable:block/coupling_plate"
+        },
+        "east": {
+          "texture": "createtrainssable:block/coupling_plate"
+        },
+        "west": {
+          "texture": "createtrainssable:block/coupling_plate"
+        },
+        "up": {
+          "texture": "createtrainssable:block/coupling_plate"
+        },
+        "down": {
+          "texture": "createtrainssable:block/coupling_plate"
+        }
+      }
+    },
+    {
+      "from": [
+        4,
+        3,
+        1
+      ],
+      "to": [
+        12,
+        9,
+        5
+      ],
+      "faces": {
+        "north": {
+          "texture": "createtrainssable:block/coupling_coil"
+        },
+        "south": {
+          "texture": "createtrainssable:block/coupling_coil"
+        },
+        "east": {
+          "texture": "createtrainssable:block/coupling_coil"
+        },
+        "west": {
+          "texture": "createtrainssable:block/coupling_coil"
+        },
+        "up": {
+          "texture": "createtrainssable:block/coupling_coil"
+        },
+        "down": {
+          "texture": "createtrainssable:block/coupling_coil"
+        }
+      }
+    }
+  ]
+}

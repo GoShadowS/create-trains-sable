@@ -1,0 +1,94 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {},
+  "elements": [
+    {
+      "from": [
+        1,
+        2,
+        1
+      ],
+      "to": [
+        15,
+        10,
+        15
+      ],
+      "faces": {
+        "north": {
+          "texture": "createtrainssable:block/truck_frame"
+        },
+        "south": {
+          "texture": "createtrainssable:block/truck_frame"
+        },
+        "east": {
+          "texture": "createtrainssable:block/truck_frame"
+        },
+        "west": {
+          "texture": "createtrainssable:block/truck_frame"
+        },
+        "up": {
+          "texture": "createtrainssable:block/truck_frame"
+        },
+        "down": {
+          "texture": "createtrainssable:block/truck_frame"
+        }
+      }
+    },
+    {
+      "from": [
+        2,
+        0,
+        -2
+      ],
+      "to": [
+        14,
+        2,
+        18
+      ],
+      "faces": {
+        "up": {
+          "texture": "createtrainssable:block/truck_wheel",
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ]
+        },
+        "down": {
+          "texture": "createtrainssable:block/truck_wheel",
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ]
+        },
+        "north": {
+          "texture": "createtrainssable:block/truck_frame"
+        },
+        "south": {
+          "texture": "createtrainssable:block/truck_frame"
+        },
+        "east": {
+          "texture": "createtrainssable:block/truck_wheel",
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ]
+        },
+        "west": {
+          "texture": "createtrainssable:block/truck_wheel",
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,18 +1,31 @@
 package dev.goshadows.createtrainssable.selftest;
 
+import com.simibubi.create.AllBlocks;
+import com.simibubi.create.Create;
+import com.simibubi.create.content.trains.entity.Carriage;
+import com.simibubi.create.content.trains.entity.CarriageBogey;
+import com.simibubi.create.content.trains.entity.Train;
+import com.simibubi.create.content.trains.graph.TrackGraph;
 import dev.goshadows.createtrainssable.CreateTrainsSable;
+import dev.goshadows.createtrainssable.bridge.BridgedCarriage;
+import dev.goshadows.createtrainssable.bridge.CarriageBody;
+import dev.goshadows.createtrainssable.bridge.TrainBridge;
+import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.rail.TruckBlockEntity;
 import dev.goshadows.createtrainssable.rail.Vec;
 import dev.goshadows.createtrainssable.rail.WheelRail;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * Scripted physics session: builds a vehicle, lets the engine drive it, and reports numbers.
@@ -23,9 +36,9 @@ import java.util.Locale;
  * rail. Every scenario prints one line with its measurements and a final line with the totals, and
  * the continuous integration job fails unless the totals say that nothing failed.</p>
  *
- * <p>The scenarios are the contract of the rail model, in order: the vehicle can be assembled and
- * finds its rail, it stays on the rail, the driven axle reaches the speed its shaft asks for, and a
- * vehicle pushed off the rail keeps its momentum and falls.</p>
+ * <p>The scenarios are the contract of the mod, in order: the vehicle can be assembled and finds its
+ * rail, it stays on the rail, the driven axle reaches the speed its shaft asks for, a vehicle pushed
+ * off the rail keeps its momentum and falls, and a Create train follows the body it is bridged to.</p>
  */
 public final class SelfTest {
 
@@ -61,7 +74,8 @@ public final class SelfTest {
                 new AssemblyScenario(),
                 new GuideScenario(),
                 new TractionScenario(),
-                new DerailScenario());
+                new DerailScenario(),
+                new BridgeScenario());
 
         private int index = -1;
         private int passed;
@@ -553,6 +567,228 @@ public final class SelfTest {
                     + " saw_off_rail=" + sawOffRail
                     + " states=" + states()
                     + " ticks=" + ticks;
+        }
+    }
+
+
+    /**
+     * A Create train with one carriage riding a physical body.
+     *
+     * <p>The harness builds a real {@link Train} with a real {@link Carriage} on the same track graph
+     * the trucks ride, registers it in Create's railway manager, and bridges it to the rig's body.
+     * From then on Create's own train loop drives this scenario: its speed is the order, the axles
+     * turn it into force, and the carriage travels the distance the body actually covered.</p>
+     *
+     * <p>The numbers this scenario asserts are the seam itself: the carriage must not drift away from
+     * the body, the body must reach the commanded speed through the wheels, the axles must stay
+     * inside the flange, and the carriage's anchor must sit over the leading axle rather than over a
+     * place Create's own integration would have chosen.</p>
+     */
+    private static final class BridgeScenario extends Scenario {
+
+        /** Speed the train asks for, in blocks per tick: 0.08 * 20 = 1.6 m/s. */
+        private static final double COMMAND = 0.08;
+
+        /**
+         * X of the two axles the rig puts under the deck.
+         *
+         * <p>A truck's axle sits in the middle of its block, so the leading axle is at 2001.5 and the
+         * trailing one at 2003.5. The carriage's bogeys are put on the same two x, which makes the
+         * reported anchor gap a real check instead of a constant half-block offset.</p>
+         */
+        private static final double LEADING_AXLE = 2001.5;
+        private static final double TRAILING_AXLE = 2003.5;
+
+        private static final double TARGET_METRES_PER_SECOND = COMMAND * CarriageBody.TICKS_PER_SECOND;
+
+        private Train train;
+        private BridgedCarriage bridged;
+        private double startCentre;
+        private double travelledBody;
+        private double speed;
+        private double peak;
+        private double lateralMax;
+        private double anchorGap = Double.NaN;
+        private int riseTick = -1;
+        private final List<Double> speeds = new ArrayList<>();
+
+        BridgeScenario() {
+            super("bridge", 220, 2376);
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            super.begin(level);
+            if (rig == null) {
+                return;
+            }
+            try {
+                buildTrain();
+            } catch (RuntimeException | LinkageError e) {
+                fail("train: " + e);
+                finished = true;
+            }
+        }
+
+        /**
+         * A carriage with two standard bogeys on the synthetic rail, one at each axle of the rig.
+         *
+         * <p>Bogey points are two blocks apart, matching the wheel point spacing of a standard bogey;
+         * the leading bogey's first point is the front of the train, so the carriage faces east, the
+         * way the rig's traction truck does.</p>
+         */
+        private void buildTrain() {
+            TrackGraph graph = rig.graph;
+            CarriageBogey leading = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
+                    rig.railPoint(LEADING_AXLE + 1.0), rig.railPoint(LEADING_AXLE - 1.0));
+            CarriageBogey trailing = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
+                    rig.railPoint(TRAILING_AXLE - 1.0), rig.railPoint(TRAILING_AXLE + 1.0));
+            Carriage carriage = new Carriage(leading, trailing, 2);
+            train = new Train(UUID.randomUUID(), UUID.randomUUID(), graph,
+                    new ArrayList<>(List.of(carriage)), new ArrayList<>(), true, 0);
+            train.targetSpeed = COMMAND;
+            Create.RAILWAYS.addTrain(train);
+            bridged = TrainBridge.bridge(train, rig.body);
+            startCentre = rig.centre().x();
+        }
+
+        @Override
+        void step() {
+            if (rig == null || train == null || bridged == null) {
+                return;
+            }
+            // The train controls of a manual train do exactly this every tick: hold the lever,
+            // mark the tick as manual, and let Create's own acceleration ramp the order up.
+            // Without the flag Create would coast the order down to zero against the ramp.
+            train.manualTick = true;
+            train.targetSpeed = COMMAND;
+            train.approachTargetSpeed(1.0f);
+
+            speed = bridged.measuredSpeed();
+            speeds.add(speed);
+            peak = Math.max(peak, Math.abs(speed));
+            lateralMax = Math.max(lateralMax, rig.lateralError());
+            if (ticks % 20 == 0) {
+                log("body=" + f(rig.centre().x() - startCentre)
+                        + " train=" + f(bridged.travelToDate())
+                        + " speed=" + f(speed)
+                        + " ordered=" + f(train.speed * CarriageBody.TICKS_PER_SECOND)
+                        + " anchor_gap=" + f(anchorGap())
+                        + " lateral=" + f(rig.lateralError())
+                        + " " + states());
+            }
+        }
+
+        @Override
+        void finish() {
+            if (rig == null || train == null || bridged == null) {
+                fail("no bridged train");
+                return;
+            }
+            travelledBody = rig.centre().x() - startCentre;
+            anchorGap = anchorGap();
+            riseTick = rampTicks();
+            if (Create.RAILWAYS.trains.get(train.id) != train) {
+                fail("the train is no longer in Create's railway manager");
+                return;
+            }
+            if (TrainBridge.bridged(train) != bridged || train.carriages.size() != 1) {
+                fail("the train no longer carries the bridged carriage");
+                return;
+            }
+            if (Math.abs(travelledBody - bridged.travelToDate()) > 0.5) {
+                fail("the carriage drifted from the body: body=" + f(travelledBody)
+                        + " carriage=" + f(bridged.travelToDate()));
+                return;
+            }
+            if (travelledBody < 2.0) {
+                fail("the body barely moved: " + f(travelledBody));
+                return;
+            }
+            if (speed < 0.8 * TARGET_METRES_PER_SECOND || speed > 1.2 * TARGET_METRES_PER_SECOND) {
+                fail("the body does not hold the speed the train asked for: " + f(speed)
+                        + " m/s against " + f(TARGET_METRES_PER_SECOND));
+                return;
+            }
+            if (peak > 1.15 * TARGET_METRES_PER_SECOND) {
+                fail("the body jumped to " + f(peak) + " m/s; a body that accelerates in one tick is"
+                        + " being teleported, not driven");
+                return;
+            }
+            if (lateralMax > CTSConfig.trucks().maxLateralError()) {
+                fail("an axle left the gauge: lateral=" + f(lateralMax));
+                return;
+            }
+            if (!(anchorGap <= 0.5)) {
+                fail("the carriage anchor is " + f(anchorGap) + " blocks away from the leading axle");
+                return;
+            }
+            pass();
+        }
+
+        /**
+         * Ticks the body needed to reach nine tenths of its final speed.
+         *
+         * <p>A body dragged along by the train would be at full speed on the first tick. This number
+         * is the time the wheels needed, and it is measured against the speed the body ended at
+         * rather than against the order, because the idling axle means the two never quite meet.</p>
+         */
+        private int rampTicks() {
+            double settled = Math.abs(speed);
+            if (settled < 1.0e-3) {
+                return -1;
+            }
+            for (int i = 0; i < speeds.size(); i++) {
+                if (Math.abs(speeds.get(i)) >= 0.9 * settled) {
+                    return i + 1;
+                }
+            }
+            return -1;
+        }
+
+        /** Horizontal distance between the carriage's leading anchor and the nearest axle. */
+        private double anchorGap() {
+            if (bridged == null || rig == null) {
+                return Double.NaN;
+            }
+            Vec3 anchor = bridged.leadingBogey().getAnchorPosition();
+            if (anchor == null) {
+                return Double.NaN;
+            }
+            double best = Double.MAX_VALUE;
+            for (Vec axle : rig.axles()) {
+                best = Math.min(best, Math.hypot(anchor.x - axle.x(), anchor.z - axle.z()));
+            }
+            return best;
+        }
+
+        @Override
+        String metrics() {
+            double travelledTrain = bridged == null ? 0.0 : bridged.travelToDate();
+            return "carriages=" + (train == null ? 0 : train.carriages.size())
+                    + " target=" + f(TARGET_METRES_PER_SECOND)
+                    + " speed=" + f(speed)
+                    + " travelled_body=" + f(travelledBody)
+                    + " travelled_train=" + f(travelledTrain)
+                    + " drift=" + f(travelledBody - travelledTrain)
+                    + " lateral_max=" + f(lateralMax)
+                    + " anchor_gap=" + f(anchorGap)
+                    + " ordered=" + f(train == null ? 0.0 : train.speed * CarriageBody.TICKS_PER_SECOND)
+                    + " peak=" + f(peak)
+                    + " rise_ticks=" + riseTick
+                    + " ticks=" + ticks;
+        }
+
+        @Override
+        void cleanup() {
+            if (train != null) {
+                TrainBridge.detach(train);
+                Create.RAILWAYS.removeTrain(train.id);
+                train.invalid = true;
+                train = null;
+            }
+            bridged = null;
+            super.cleanup();
         }
     }
 

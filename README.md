@@ -3,7 +3,8 @@
 **Physical rail vehicles for Create.** A vehicle is a Sable structure, and its axles are the only
 thing that holds it on the rails: real wheel/rail contact, adhesion-limited traction, curves that
 can throw it off, and spring couplings that hold two vehicles together with equal and opposite
-force.
+force. A Create train can be bridged to such a body, so the route stays Create's while the motion
+becomes the physics engine's.
 
 Minecraft 1.21.1 · NeoForge · Create 6.0.10 · Sable 2.0 · Java 21
 
@@ -65,6 +66,29 @@ linking is the rest length, so hooking up never yanks the vehicles together. The
 applied as an impulse to one body and the opposite impulse to the other, at the coupling faces: a
 locomotive is genuinely held back by the wagons it pulls.
 
+### A Create train on a body
+
+A body on its own has no route. Create's trains have the route - the track graph, the travelling
+points, the signals, the stations, the schedule and the train screen - and no physics. The bridge
+(`bridge/`) joins the two without merging them:
+
+- **Create keeps the route.** The train stays a real `Train` in Create's railway manager. Nothing
+  about `Train`, `Carriage`, `TrackGraph` or the train screen is patched or replaced.
+- **The physics keeps the body.** With `TrainBridge.bridge(train, body)` the single carriage of the
+  train becomes a `BridgedCarriage`. Instead of travelling the distance `Train.speed` implies, it
+  travels the distance its body actually covered since the last tick, measured along the carriage's
+  own forward direction and clamped at two blocks per tick so a teleport cannot drag a carriage.
+- **The order still flows the other way.** `Train.speed` - set by the controls, by a schedule or by
+  `Navigation` - is handed to the axles as a target speed, and the wheels turn it into force. The
+  train tells the body how fast to go; it never tells it where it is.
+- **No contraption entity.** A bridged carriage does not spawn a `CarriageContraptionEntity`: the
+  body in the world is the carriage, and a contraption drawn on top of it would be a second copy of
+  the same vehicle.
+
+Today the bridge has no in-game entry point: a train is bridged by code (`TrainBridge.bridge`) or by
+the harness. Turning a carriage's own contraption into a body, and giving a player a tool to ask for
+it, is the next step and is not claimed here.
+
 ## Configuration
 
 `config/createtrainssable-server.toml`, applied immediately:
@@ -107,7 +131,7 @@ maxAcceleration = 14.0
 
 Three things run on every push, in this order, and each has to pass:
 
-1. **`./gradlew build`** - the mod compiles, and the rail-contact arithmetic passes 12 unit tests
+1. **`./gradlew build`** - the mod compiles, and the rail-contact arithmetic passes 11 unit tests
    (holding the rail, leaving it past the flange, the attach window, overspeed on a curve, the
    adhesion cap, weight and grip sharing between axles, the steering correction).
 2. **`./gradlew runSelfTest`** - the physics session described below. A dedicated server builds a
@@ -127,22 +151,33 @@ then measures it over several hundred ticks:
 | `guide` | a sideways push is absorbed by the flange and the vehicle settles | worst and final lateral error, vertical offset, speed |
 | `traction` | 32 RPM really moves the vehicle at 1.6 m/s | speed, distance travelled, states |
 | `derail` | a 14 m/s sideways push leaves the rail, keeps momentum and falls | speed after the push, height lost, whether the flange ever gave up |
+| `bridge` | a real Create train with one carriage follows the body it is bridged to | commanded and measured speed, distance travelled by the body and by the carriage, drift, lateral error, anchor gap, ramp |
 
 Each scenario prints one line of numbers and the run ends with
-`CTS SELFTEST SUMMARY scenarios=4 passed=4 failed=0`; the CI job fails unless that line says
-`failed=0`. The last run on `main`:
+`CTS SELFTEST SUMMARY scenarios=5 passed=5 failed=0`; the CI job fails unless that line says
+`failed=0`. The last run on `main` (the `bridge` line is wrapped for width):
 
 ```
 assembly PASS blocks=17 trucks=2 mass=17.000 states=[GUIDING,GUIDING]
 guide    PASS lateral_max=0.046 lateral_final=0.020 vertical=0.005 speed=0.126
 traction PASS target=1.600 speed=1.424 travelled=13.050
 derail   PASS horizontal_speed=4.472 dropped=52.413 saw_off_rail=true
+bridge   PASS carriages=1 target=1.600 speed=1.424 travelled_body=14.234
+              travelled_train=14.234 drift=0.000 lateral_max=0.000
+              anchor_gap=0.011 ordered=1.600 peak=1.424 rise_ticks=34
 ```
+
+The bridge scenario builds a real `Train` with a real `Carriage` on the same track graph, registers
+it in Create's railway manager and bridges it to the rig. It then lets Create's own train loop drive:
+the order reaches the commanded 1.6 m/s, the body settles at 1.42 m/s after 34 ticks of wheel-limited
+ramp, the carriage travels 14.234 blocks in the same 220 ticks as the body with no drift, and its
+leading anchor sits 0.011 blocks from the leading axle. A body dragged along by the train would be at
+full speed on the first tick and would keep a constant offset; both numbers say it is not.
 
 The driven axle settles at 1.42 m/s against a commanded 1.6 m/s because the idling axle is rolling
 and taking energy out; that is the model working, not a target being missed.
 
-Three honest limitations of the harness:
+Four honest limitations of the harness:
 
 - **the rail is synthesised**, not built from track blocks: a two-node `TrackGraph` with a straight
   `TrackEdge`. The contact sees exactly the same thing it would see on a placed straight track, but
@@ -151,7 +186,10 @@ Three honest limitations of the harness:
   no kinetic network to take rotation from. The block's force output and the physics are real; only
   the RPM it reads is set by the test;
 - **there is no curve in the harness yet**, so `curveLateralLimit` and the overspeed derailment are
-  covered only by the arithmetic tests. A Bezier edge in the synthetic graph is the next step.
+  covered only by the arithmetic tests. A Bezier edge in the synthetic graph is the next step;
+- **the bridged train is built by code, and its body is the rig.** The scenario proves the seam -
+  order in, measured distance out, carriage following the body - but the carriage's contraption,
+  the blocks a player would have built, is not part of it.
 
 **Not verified:** nothing here has been driven in a world with a player. The feel - acceleration,
 brake distances, how tight a curve can be taken, whether the trucks sit where the build expects -
@@ -163,10 +201,13 @@ measurement from play.
 - **Assembly takes the whole connected structure.** The assembly tool gathers everything touching
   the block that was clicked, so a vehicle that is connected to the ground or to a building will
   take that with it. Disconnect it first, or click a part that is not touching the world.
-- **Create trains are not converted.** A Create station train stays a Create contraption. The
-  physical vehicle is the one the player builds and assembles; converting station trains would mean
-  keeping two representations of the same train in sync, which is exactly what the previous
-  architecture got wrong.
+- **A train's own contraption is not turned into a body yet.** The bridge binds a train to a body
+  that already exists, and the harness supplies one it builds. Reading a carriage's contraption,
+  putting its blocks into the world and assembling them is the next step; until then a train and a
+  body are joined only by code.
+- **One carriage per body.** `TrainBridge.bridge` refuses a train with more than one carriage: the
+  couplings between bodies have to decide who pulls whom, and the spring coupling model is not wired
+  into the train loop yet. A multi-carriage train stays a Create contraption.
 - **One contact point per axle.** There is no wheel lift, no axle load transfer and no per-wheel
   slip curve; tight S-bends are where this shows first.
 - **Couplings do not transmit torque or bend.** They pull and push along one line, which is what a

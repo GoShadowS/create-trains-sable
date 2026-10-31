@@ -47,6 +47,10 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     private WheelRail.State loggedState = WheelRail.State.NO_TRACK;
     /** Shaft speed forced by the physics harness; {@code null} in a normal game. */
     private Float forcedSpeed;
+    /** Speed asked for by the train bridge along {@link #externalDirection}; {@code null} when unused. */
+    private Double externalSpeed;
+    /** World direction the bridge's speed is signed along. */
+    private Vec externalDirection = Vec.ZERO;
     /** Last force this axle asked for; read by the harness. */
     private Vec lastForce = Vec.ZERO;
 
@@ -118,9 +122,7 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         int driven = countTrucks(subLevel, true);
         double mass = vehicleMass(subLevel);
         float shaftSpeed = forcedSpeed != null ? forcedSpeed : getSpeed();
-        double target = isDriven()
-                ? WheelRail.targetSpeed(shaftSpeed, facingSign(), settings)
-                : 0.0;
+        double target = targetSpeed(track, shaftSpeed, settings);
 
         WheelRail.Output output = WheelRail.solve(track, axle, velocity, target, isDriven(), trucks,
                 driven, mass, gravity(subLevel, settings), secondsSinceAssembly, settings);
@@ -136,6 +138,24 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         if (output.state() != loggedState) {
             log(output.state());
         }
+    }
+
+    /**
+     * Speed this axle should reach, signed the way {@link WheelRail} expects it.
+     *
+     * <p>Normal gameplay: a driven axle converts its shaft speed into a ground speed, an idler only
+     * rolls. When a train bridge drives the vehicle there is no shaft, so the bridge gives a speed in
+     * m/s along a world direction; that direction is projected onto the rail the axle is on, which
+     * resolves the sign for an axle mounted any way round.</p>
+     */
+    private double targetSpeed(RailTrack rail, float shaftSpeed, TruckSettings settings) {
+        if (externalSpeed != null) {
+            if (rail == null || !isDriven()) {
+                return 0.0;
+            }
+            return externalSpeed * externalDirection.dot(rail.tangent());
+        }
+        return isDriven() ? WheelRail.targetSpeed(shaftSpeed, facingSign(), settings) : 0.0;
     }
 
     /**
@@ -248,6 +268,23 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
      */
     public void selfTestSpeed(Float rpm) {
         this.forcedSpeed = rpm;
+    }
+
+    /**
+     * Drives this axle from the train bridge: a speed in m/s along a world direction.
+     *
+     * <p>This is the path a train takes instead of a shaft. The bridge passes the direction the
+     * carriage faces, so the sign of the speed is the train's, not the block's.</p>
+     */
+    public void driveAlong(Vec direction, double metresPerSecond) {
+        this.externalDirection = direction == null ? Vec.ZERO : direction.normalized();
+        this.externalSpeed = metresPerSecond;
+    }
+
+    /** Returns this axle to its shaft, or to free rolling when it has none. */
+    public void clearDrive() {
+        this.externalSpeed = null;
+        this.externalDirection = Vec.ZERO;
     }
 
     /** The force this axle asked for on the last physics tick; used by the harness. */

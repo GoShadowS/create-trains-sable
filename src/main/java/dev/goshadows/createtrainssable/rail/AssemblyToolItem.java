@@ -1,6 +1,7 @@
 package dev.goshadows.createtrainssable.rail;
 
 import dev.goshadows.createtrainssable.CreateTrainsSable;
+import dev.goshadows.createtrainssable.bridge.BridgeTool;
 import dev.ryanhcode.sable.api.SubLevelAssemblyHelper;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.minecraft.ChatFormatting;
@@ -19,6 +20,11 @@ import net.minecraft.world.item.context.UseOnContext;
  * a plot and handed to the physics engine, and from that moment the trucks on it are what hold it
  * on the rails. There is no copy of the vehicle left in the world and no contraption entity created,
  * so there is nothing to keep in sync afterwards.</p>
+ *
+ * <p>The tool has a second action, for developers: <b>sneak-right-click</b> a block of an assembled
+ * vehicle to bridge the nearest Create train to it, or to unbind a train that already rides it. That
+ * action is described in the README next to the manual test procedure; it is the only way to make a
+ * Create train physical without writing code, and it is a debug action, not the mod's main feature.</p>
  *
  * <p>Assembly is refused when the structure is too big or when any part of it is already inside a
  * sub-level, because moving blocks that belong to another body would tear that body apart.</p>
@@ -40,6 +46,14 @@ public class AssemblyToolItem extends Item {
         }
         Player player = context.getPlayer();
         BlockPos origin = context.getClickedPos();
+
+        // Sneaking hands the same click to the bridge: assemble with the tool, then bridge with the
+        // same tool while crouched.
+        if (player != null && player.isShiftKeyDown()) {
+            return BridgeTool.toggle(level, origin, player).ok()
+                    ? InteractionResult.SUCCESS
+                    : InteractionResult.FAIL;
+        }
 
         SubLevelAssemblyHelper.GatherResult gathered =
                 SubLevelAssemblyHelper.gatherConnectedBlocks(origin, level, CAPACITY, null);

@@ -1,5 +1,6 @@
 package dev.goshadows.createtrainssable.config;
 
+import dev.goshadows.createtrainssable.bogey.BogeySettings;
 import dev.goshadows.createtrainssable.physics.Tuning;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
@@ -52,6 +53,26 @@ public final class CTSConfig {
     private static final ModConfigSpec.DoubleValue RAIL_LATERAL_TOLERANCE;
     private static final ModConfigSpec.IntValue RAIL_TOLERANCE_TICKS;
 
+    private static final ModConfigSpec.BooleanValue CONVERT_TRAINS;
+    private static final ModConfigSpec.DoubleValue BOGEY_SPEED_PER_RPM;
+    private static final ModConfigSpec.DoubleValue BOGEY_TRACTION;
+    private static final ModConfigSpec.DoubleValue BOGEY_BRAKE;
+    private static final ModConfigSpec.DoubleValue BOGEY_GUIDE_STIFFNESS;
+    private static final ModConfigSpec.DoubleValue BOGEY_GUIDE_DAMPING;
+    private static final ModConfigSpec.DoubleValue BOGEY_MAX_GUIDE;
+    private static final ModConfigSpec.DoubleValue BOGEY_ALIGN_GAIN;
+    private static final ModConfigSpec.DoubleValue BOGEY_ALIGN_DAMPING;
+    private static final ModConfigSpec.DoubleValue BOGEY_MAX_ANGULAR;
+    private static final ModConfigSpec.DoubleValue BOGEY_MAX_LATERAL;
+    private static final ModConfigSpec.DoubleValue BOGEY_MAX_VERTICAL;
+    private static final ModConfigSpec.DoubleValue BOGEY_CURVE_LIMIT;
+    private static final ModConfigSpec.DoubleValue BOGEY_SCAN_RADIUS;
+    private static final ModConfigSpec.IntValue BOGEY_RECHECK_TICKS;
+    private static final ModConfigSpec.DoubleValue COUPLER_RANGE;
+    private static final ModConfigSpec.DoubleValue COUPLER_STIFFNESS;
+    private static final ModConfigSpec.DoubleValue COUPLER_DAMPING;
+    private static final ModConfigSpec.DoubleValue COUPLER_MAX_ACCELERATION;
+
     private static final ModConfigSpec.BooleanValue CONVERT_ON_ASSEMBLY;
     private static final ModConfigSpec.BooleanValue SHOW_RAPIER_HITBOXES;
 
@@ -67,6 +88,11 @@ public final class CTSConfig {
                 .defineInRange("maxActiveTrains", 10, 1, 64);
         SESSION_TIMEOUT = builder.comment("Ticks before an unrecoverable wreck is abandoned.")
                 .defineInRange("sessionTimeoutTicks", 12000, 200, 200000);
+        CONVERT_TRAINS = builder.comment(
+                        "Replace Create trains with Sable structures (the old behaviour).",
+                        "Off by default: trains are now built out of physics bogeys instead, which needs no",
+                        "conversion and cannot produce a second copy of the train.")
+                .define("convertCreateTrains", false);
         CONVERT_ON_ASSEMBLY = builder.comment(
                         "Represent every train as Sable sub-levels as soon as it exists, instead of waiting for a derailment.",
                         "Disable this to keep Create's own contraption rendering until a train crashes.")
@@ -166,6 +192,57 @@ public final class CTSConfig {
                 .defineInRange("toleranceTicks", 10, 1, 200);
         builder.pop();
 
+        builder.comment(
+                        "Physics bogeys: a Sable vehicle on Create rails.",
+                        "Build the vehicle, put bogeys under it, assemble it, drive it with a shaft.")
+                .push("bogey");
+        BOGEY_SPEED_PER_RPM = builder.comment(
+                        "Metres per second of target speed per RPM of the driving shaft.",
+                        "32 RPM therefore means about 1.6 blocks per second with the default value.")
+                .defineInRange("speedPerRpm", 0.05, 0.0, 5.0);
+        BOGEY_TRACTION = builder.comment("Acceleration the driven wheels can put down, in m/s^2.")
+                .defineInRange("tractionAcceleration", 1.2, 0.0, 100.0);
+        BOGEY_BRAKE = builder.comment("Acceleration the brakes can remove, in m/s^2.")
+                .defineInRange("brakeAcceleration", 1.6, 0.0, 100.0);
+        BOGEY_GUIDE_STIFFNESS = builder.comment("How firmly the axle is held on the rail, in 1/s^2.")
+                .defineInRange("guideStiffness", 18.0, 0.0, 500.0);
+        BOGEY_GUIDE_DAMPING = builder.comment("Damping of the axle on the rail, in 1/s.")
+                .defineInRange("guideDamping", 6.0, 0.0, 200.0);
+        BOGEY_MAX_GUIDE = builder.comment("Largest acceleration the rail contact may deliver, in m/s^2.")
+                .defineInRange("maxGuideAcceleration", 26.0, 0.1, 500.0);
+        BOGEY_ALIGN_GAIN = builder.comment("How strongly the vehicle is turned to follow the rail.")
+                .defineInRange("alignGain", 3.0, 0.0, 100.0);
+        BOGEY_ALIGN_DAMPING = builder.comment("Damping of that rotation, in 1/s.")
+                .defineInRange("alignDamping", 1.5, 0.0, 100.0);
+        BOGEY_MAX_ANGULAR = builder.comment("Largest angular acceleration the rails deliver, in rad/s^2.")
+                .defineInRange("maxAngularAcceleration", 8.0, 0.1, 100.0);
+        BOGEY_MAX_LATERAL = builder.comment(
+                        "Lateral distance from the rail that still counts as on the rail, in blocks.",
+                        "Beyond it the bogey is off the track and the vehicle is a wreck.")
+                .defineInRange("maxLateralError", 1.2, 0.05, 8.0);
+        BOGEY_MAX_VERTICAL = builder.comment(
+                        "Vertical distance from the rail head that still counts as on the rail.")
+                .defineInRange("maxVerticalError", 0.9, 0.05, 8.0);
+        BOGEY_CURVE_LIMIT = builder.comment(
+                        "Lateral acceleration the flanges can take before the vehicle leaves the rail, in m/s^2.",
+                        "This is what makes a curve taken too fast derail instead of holding.")
+                .defineInRange("curveLateralLimit", 2.6, 0.1, 100.0);
+        BOGEY_SCAN_RADIUS = builder.comment("How far to look for track around a bogey, in blocks.")
+                .defineInRange("scanRadius", 24.0, 2.0, 128.0);
+        BOGEY_RECHECK_TICKS = builder.comment("Ticks between track lookups; physics runs faster than this.")
+                .defineInRange("trackRecheckTicks", 2, 1, 40);
+        COUPLER_RANGE = builder.comment(
+                        "Distance within which two couplers facing each other link, in blocks.")
+                .defineInRange("couplerRange", 2.5, 0.5, 16.0);
+        COUPLER_STIFFNESS = builder.comment("Coupler stiffness in 1/s^2 per block of extension.")
+                .defineInRange("couplerStiffness", 6.0, 0.0, 200.0);
+        COUPLER_DAMPING = builder.comment("Coupler damping in 1/s.")
+                .defineInRange("couplerDamping", 4.0, 0.0, 200.0);
+        COUPLER_MAX_ACCELERATION = builder.comment(
+                        "Strongest acceleration a coupler may transfer, in m/s^2.")
+                .defineInRange("couplerMaxAcceleration", 14.0, 0.0, 200.0);
+        builder.pop();
+
         builder.comment("Diagnostics.").push("debug");
         SHOW_RAPIER_HITBOXES = builder.comment(
                         "Log body poses, velocities and bounds; Sable draws the actual colliders in its client overlay.")
@@ -176,6 +253,23 @@ public final class CTSConfig {
     }
 
     private CTSConfig() {
+    }
+
+    /** True when the old train conversion is enabled; off by default. */
+    public static boolean convertTrains() {
+        return CONVERT_TRAINS.get();
+    }
+
+    /** Bogey and coupler tuning, read on every physics tick. */
+    public static BogeySettings bogey() {
+        return new BogeySettings(
+                BOGEY_SPEED_PER_RPM.get(), BOGEY_TRACTION.get(), BOGEY_BRAKE.get(),
+                BOGEY_GUIDE_STIFFNESS.get(), BOGEY_GUIDE_DAMPING.get(), BOGEY_MAX_GUIDE.get(),
+                BOGEY_ALIGN_GAIN.get(), BOGEY_ALIGN_DAMPING.get(), BOGEY_MAX_ANGULAR.get(),
+                BOGEY_MAX_LATERAL.get(), BOGEY_MAX_VERTICAL.get(), BOGEY_CURVE_LIMIT.get(),
+                BOGEY_SCAN_RADIUS.get(), BOGEY_RECHECK_TICKS.get(), COUPLER_RANGE.get(),
+                COUPLER_STIFFNESS.get(), COUPLER_DAMPING.get(), COUPLER_MAX_ACCELERATION.get(),
+                GRAVITY.get()).validated();
     }
 
     /** True when assembled trains should be replaced by Sable structures straight away. */

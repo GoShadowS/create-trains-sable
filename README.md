@@ -1,79 +1,79 @@
 # Create Trains Sable
 
-Create Trains Sable is a Minecraft 1.21.1 add-on for NeoForge. It replaces the
-object a Create train is built from: instead of a contraption entity, every
-carriage becomes a Sable sub-level with a Rapier rigid body. A train can therefore
-derail, crash, collide and be walked on like any other Sable structure. A wreck
-stays where it fell; if the server owner enables `[rebinding] autoResync`, a
-settled wreck is put back on a nearby track instead, so stations, signals and
-schedules keep working.
+Create Trains Sable is a Minecraft 1.21.1 add-on for NeoForge. It makes a **Sable vehicle
+ride Create's rails on physics**, the way Create: Simurail does: put bogeys on your
+build, assemble it into a sub-level, drive it with a shaft, and it rolls along the
+track, takes curves, slips, couples to wagons and leaves the rails when it is going
+too fast for the curve it is in.
 
-> **Status: 0.1.0, early development.** The physics model is unit-tested; the
-> Sable integration is written against Sable 2.0.6's public API but has not yet
-> been validated in a live game. There is no public release yet. Read
-> [Known Issues / Limitations](#known-issues--limitations) before adding this to
-> a world you care about.
+There is no train object being converted, no hidden contraption and nothing that is
+teleported, because the vehicle *is* the thing you built.
+
+> **Status: 0.1.0, early development.** The physics code is unit-tested; the Sable
+> integration is written against Sable 2.0.6's public API but has not yet been run in a
+> live game. There is no public release yet. Read
+> [Known Issues / Limitations](#known-issues--limitations) before adding this to a world
+> you care about.
 
 ## Compatibility
 
 Targets Minecraft 1.21.1 on NeoForge 21.1.228 or newer in the 21.1 line, with
-Create 6.0.10.x. Sable 2.0.x is optional and is required for the structure and
-physics modes; Sable Companion 1.6.0 is bundled. Create: Aeronautics 1.3.x is
-compiled against - it is the reference for what a Sable structure feels like in
-game - but it is neither required nor bundled. Java 21 is the language level. There is no
-Fabric version and no multiloader layout while Sable's development is centred on
-NeoForge.
+Create 6.0.10.x. **Sable 2.0.x and Create: Aeronautics 1.3.x are required**: a bogey is a
+block entity that Sable ticks on a sub-level, and the vehicle has to be assembled with
+Aeronautics' tooling before a bogey does anything. Sable Companion 1.6.0 comes as a
+bundled library. Java 21 is the language level. There is no Fabric version and no
+multiloader layout while Sable's development is centred on NeoForge.
 
-Without Sable the add-on loads, writes a warning to the log and leaves all train
-movement to Create. Nothing is converted and `TrackGraph`, stations and signals
-are untouched. This is why `sable` is declared as an `optional` dependency in
-`neoforge.mods.toml`, not a required one.
+## Building a train
+
+1. Build the vehicle out of ordinary blocks, on the ground or on a schematic.
+2. Put **physics bogeys** where the wheels should be. A powered bogey takes rotary power
+   on its axle axis - a shaft or a cogwheel from a motor, a boiler or a motorised
+   bearing - and the speed of that rotation is the speed it tries to reach. Unpowered
+   bogeys carry weight and roll.
+3. Assemble the whole thing into a sub-level with Create: Aeronautics' assembly tooling,
+   the same way a ship or an airship is assembled.
+4. Give the powered bogey rotation and watch it go. Point the bogeys in the direction the
+   vehicle should move when the shaft turns forwards.
+5. Add an **automatic coupler** to the end of the vehicle, and another coupler facing it on
+   a second vehicle, and the two hook up on their own within `couplerRange`. A locomotive
+   then actually drags its wagons, and a shove at the back is felt at the front.
 
 ## What it does
 
-The add-on replaces the object a train is made of. A Create train is a
-`CarriageContraption` entity that the game draws and collides for you; here every
-carriage is turned into a **Sable sub-level** instead, so the train is a real
-structure in Sable's plot grid: it is rendered by Sable, it collides with terrain,
-entities and other sub-levels, and tools that understand Sable can see it.
+Each bogey holds its axle on the nearest piece of Create track and pulls the vehicle along
+it. Everything is applied as a change of velocity on Sable's physics substeps, so:
 
-The replacement happens as soon as a train exists - built in a station or loaded
-from a save - unless `convertOnAssembly` is turned off. Create's
-`CarriageContraptionEntity` stays alive but invisible: it still owns the schedule,
-the seats, the contraption inventory and the train maths. Create therefore keeps
-choosing the route, while what the player sees and bumps into is Sable.
+- the vehicle can be pushed, rammed, loaded with cargo and tipped over;
+- a curve taken too fast makes the flange limit trip and the bogey stops guiding, which is
+  a derailment you can see coming - the vehicle keeps its momentum and becomes a wreck;
+- a heavy train is not slower than a light one, because the model works in accelerations
+  rather than forces;
+- the vehicle never gets a position teleported into it, so it can never jump back to where
+  it was built.
 
-The running train is then **simulated, not teleported**. Each tick the mod asks
-Create where every carriage should be, and pushes the body there with forces
-(`[rails]` below): a position/velocity controller holds it on the sleeper line, a
-torque controller keeps it pointing along the track, gravity is cancelled
-feed-forward, and a spring-damper coupler ties each carriage to the next one so the
-chain transfers real momentum. The force is capped by the grip of the wheels, and
-a capped controller that cannot follow its carriage is how a train leaves the rails
-in this mod: it is not a trigger that decides to derail, it is physics that runs
-out of grip.
+The guidance is a position/velocity controller on the rail point plus a gravity
+feed-forward, capped at `maxGuideAcceleration` - the grip of the wheel/rail contact. That
+cap is what makes the difference between a train and a ghost: when it is exceeded, the
+bogey reports that it is off the rail, stops applying guidance, and physics takes over.
 
-A server-side monitor reads the public state of every train each tick. It samples
-the leading bogey's position, fits a circle through three samples to get the curve
-radius, and compares the train's lateral acceleration with a limit derived from
-track gauge, centre-of-gravity height and wheel-flange friction. Create's own
-`Train.crash()` event, a sudden speed drop and a hard deceleration are also
-derailment triggers.
+### Blocks
 
-When a trigger fires, the mod stops following the train: the sub-levels are
-released to Rapier with the train's momentum, passengers are ejected, and wheel
-adhesion, rolling resistance and braking are applied as impulses on Sable's
-physics substeps. From that point the wreck moves only because Rapier says so.
+| Block | What it does |
+| --- | --- |
+| Physics Bogey | Driven axle. Speed follows the rotation on its axle, so 32 RPM is about 1.6 blocks/s and a full speed shaft is about 12.8 blocks/s. |
+| Unpowered Physics Bogey | Carries weight and rolls; braking only. |
+| Automatic Coupler | Hooks up mouth to mouth with another coupler within `couplerRange`; the spring keeps the distance it had when it linked. |
 
-By default the wreck simply stays where Rapier put it: it is a normal Sable
-structure, it can be walked on, pushed, broken or left in the tunnel it fell into.
-With `[rebinding] autoResync = true` a body that has been quiet, upright and close
-to a track for long enough is put back instead: the mod re-seeds the travelling
-points using Create's own `TrainMigration` and `TravellingPoint.migrateTo` API,
-restores `Train.graph`, and rebuilds the sub-levels at the wreck's pose. If the
-original graph no longer holds the train, the mod looks for the closest straight
-edge long enough to hold it - and gives up rather than teleporting the wreck
-somewhere else.
+### The old train conversion
+
+Earlier versions replaced Create trains with Sable structures, with the Create contraption
+hidden behind them. That is still in the mod, but `[general] convertCreateTrains` is now
+**off by default**: it needed three render/collision mixins to keep one of the two copies
+out of sight, and any future Create change to those internals would bring the duplicate
+back. The bogey system does not need any of that, so it is the default.
+
+`[rails]` and `[rebinding]` only affect that legacy path.
 
 ## Configuration
 
@@ -82,6 +82,24 @@ with documented defaults on first start. It is read on every tick, so a reload
 takes effect without restarting the world. Key groups:
 
 ```toml
+[bogey]
+speedPerRpm = 0.05           # m/s per RPM of the driving shaft
+tractionAcceleration = 1.2   # m/s^2 the driven wheels can put down
+brakeAcceleration = 1.6      # m/s^2 the brakes can remove
+guideStiffness = 18.0        # how firmly the axle is held on the rail
+guideDamping = 6.0
+maxGuideAcceleration = 26.0  # grip limit, m/s^2
+alignGain = 3.0              # how strongly the vehicle is turned along the rail
+maxLateralError = 1.2        # blocks off the rail before the bogey gives up
+maxVerticalError = 0.9
+curveLateralLimit = 2.6      # m/s^2 of flange load before a curve derails the vehicle
+scanRadius = 24.0            # how far to look for track
+trackRecheckTicks = 2        # track lookups are cheap, but not free
+couplerRange = 2.5           # blocks within which two couplers link
+couplerStiffness = 6.0
+couplerDamping = 4.0
+couplerMaxAcceleration = 14.0
+
 [general]
 enabled = true
 conversionMode = "THRESHOLD"   # THRESHOLD, ALWAYS, DISABLED
@@ -124,6 +142,9 @@ stableTicks = 40
 showRapierHitboxes = false
 ```
 
+`[bogey] curveLateralLimit` is the number that decides how a train feels: raise it and
+trains hold absurd curves, lower it and a normal turn at speed throws the vehicle off.
+
 `[rails] physical = false` restores the old kinematic behaviour - the structure is
 teleported onto the carriage every tick - which is cheaper and cannot derail but
 also cannot be pushed, so it is only meant as an escape hatch.
@@ -141,105 +162,62 @@ through its datapack-driven `MassTracker`. This mod ships definitions under
 `data/createtrainssable/physics_block_properties/` for Create bogeys, railway
 casings and train controls; server owners can override them with a datapack.
 
-## Relationship to Create: Loconautics and Create: Simurail
+## Relationship to Create: Simurail and Create: Loconautics
 
-Two projects define what a "physical Create train" should feel like, and both are
-references for this add-on. Neither is used here: no code, API or dependency is
-shared, and neither needs to be installed.
+**Create: Simurail** (MIT, source available) is the direct reference for this add-on, and
+the bogey system here is the same idea implemented against this project's own code:
+physics bogey blocks that hold axles on Create track, adhesion-limited traction and
+braking, slip and derailment when the curve cannot be held, and couplers between
+vehicles. No Simurail code is used; its public API calls and its model were studied and
+reimplemented.
 
-**Create: Loconautics** (unreleased, Create: Aeronautics add-on) reimplements
-Create trains as Sable physics objects assembled at a train station. From its
-published material: real derailments and crash deformation, physical coupling,
-trains that need real rotational power, blocks on board staying interactive
-(furnaces, chests, machinery), building on an assembled train, and a per-train
-choice between a Create contraption and a Sable body. Vanilla features that do not
-survive the change - portals, operation in unloaded chunks, schedules - are being
-added one by one after release.
+Where this implementation differs from it:
 
-**Create: Simurail** (MIT, source available) takes the other route: the train is a
-Sable sub-level the player assembles, and it is moved by *physics bogeys* - axles
-constrained to the Create track graph, applying traction limited by wheel
-adhesion, slipping when the demand exceeds it, and losing the track when the curve
-is taken too fast. It also adds automatic couplers that form real joints between
-vehicles, gangway frames, and a physics probe/controller set.
+- Simurail constrains each axle with a Sable `GenericConstraint` joint with linear limits
+  and a limited rotation range, so the vehicle is kinematically *attached* to the rail and
+  only breaks free when a limit is exceeded. Here the axle is held by a capped
+  acceleration instead: no joint, no limit special case, and the body stays a free rigid
+  body at every moment. It is simpler to reason about and cannot fight the solver, but it
+  is also a servo, not a flange: it cannot model wheel lift or axle load transfer.
+- Simurail has a full bogey UI (control modes, brake strength, coupling through a
+  connector item, probes, a remote controller, ComputerCraft). Here the bogey only reads
+  rotation and the coupler links automatically, which is the minimum that makes a train
+  drivable.
+- Simurail tracks the rail by scanning track blocks in the sub-level's local space as well
+  as the global graph, so a vehicle can ride rails that are themselves on another
+  sub-level. Here only the global `TrackGraph` is searched.
 
-What this add-on takes from them:
-
-- a train is a Sable structure, not a contraption (both);
-- the running train is held on its rails by forces, and a derailment is the rails
-  running out of grip rather than a scripted trigger (Simurail's bogey model);
-- carriages are coupled with a spring-damper and exchange momentum (both);
-- a wreck stays where it fell and is a normal Sable structure; putting it back on
-  a track is opt-in (Loconautics' "the train is the object" stance).
-
-What is still missing:
-
-1. **Create's train is still the route authority.** The hidden contraption exists
-   so schedules, stations and signals keep working. Removing it entirely means
-   reimplementing station stops, coupling, seat assignment and signal lookups, which
-   is Loconautics' main body of work and its stated reason for shipping vanilla
-   features one by one.
-2. **Real bogey blocks.** Simurail's axles are blocks with per-axle traction,
-   adhesion and slip; here the rail forces act on the whole carriage body. Per-axle
-   constraint joints (Sable `GenericConstraint` with linear limits) would give
-   flange contact, wheel lift and a much better curve feel.
-3. **Rotational power.** Trains here keep Create's speed control; a train does not
-   need kinetic stress or a boiler to move.
-4. **Blocks on board.** The structure's blocks are real Sable blocks, but Create
-   contraption behaviour (drills, deployers, funnels processing on the move) is
-   tied to the contraption, not the sub-level.
-5. **Per-train opt-out**, automatic coupling/uncoupling as a physical action, and
-   unloaded-chunk operation.
+**Create: Loconautics** (unreleased) takes the other route: a Create train is assembled at
+a station and *becomes* a Sable body. This add-on did that first, and it is why the
+previous version had the duplicate-contraption and teleport problems: keeping Create's
+train as the route authority means two objects for one train. That path is now
+`convertCreateTrains = false` by default. If it is ever finished properly, it means
+reimplementing station stops, coupling, seat assignment and signal lookups on top of the
+structure - which is Loconautics' main body of work.
 
 ## Known Issues / Limitations
 
-- **Not yet validated in a live game.** The source is written against
-  Create 6.0.10-281, Sable 2.0.6 and NeoForge 21.1.228, but no jar built from
-  this repository has been run in a game yet. Expect to file the first
-  integration bugs.
-- **No public release yet.** A release will be published once the integration has
-  been exercised in-game.
-- **Sable's API is not semver-stable.** Types such as `ServerSubLevel`,
-  `RigidBodyHandle` and `SubLevelAssemblyHelper` may move between Sable releases.
-  A new Sable version can require an update here.
-- **Rebinding is off by default and conservative.** When enabled it needs the
-  original graph to still resolve the travelling points near the wreck, or a
-  straight edge long enough for the whole train within `maxTrackDistance`. A wreck
-  in a tunnel, on a curve, or far from any track stays a wreck. After
-  `sessionTimeoutTicks` the mod stops trying; the body is never removed behind the
-  player's back.
-- **Conversion needs clear space.** Blocks are only materialised into air. A train
-  that derails inside terrain produces a partial wreck, and changes made to the
-  wreck's block entities are not merged back into the contraption on resync.
-- **Passengers are ejected** when a train derails. While it runs normally they stay
-  on the hidden contraption entity, so they are not pushed by the sub-level.
-- **The route is still Create's.** A running train is held on its rails by forces,
-  so it can be pushed and can run out of grip, but where the rails go is still
-  Create's travelling points. `[rails] physical = false` switches back to teleporting
-  the structure onto the carriage.
-- **The rail controller is a servosystem, not rail contact.** It cannot model wheel
-  flange contact, axle load transfer or slip per axle; the grip limit is one number
-  per carriage. Expect a softer, more "arcade" feel than Simurail's per-axle
-  constraints, especially in tight S-bends.
-- **The carriage entity is hidden on purpose.** Its renderer and its entity
-  collisions are suppressed while the structure exists, because otherwise the train
-  would be drawn and would push players twice.
-- **Orientation at hand-off is upright.** The materialised blocks snap to the
-  voxel grid, so a train that was pitched on a slope starts its rigid-body life
-  axis-aligned. Rapier takes over rotation from there.
-- **Server restarts.** Active wrecks are discarded when the server stops and are
-  not re-adopted after restart. The hidden contraption is made visible again and
-  the train stays derailed until a player deals with it.
-- **Collisions before conversion** come from Create's own crash detection and from
-  measured speed drops. Real rigid-body collisions between trains, entities and
-  other sub-levels only exist after the conversion has happened.
-- **No client-side prediction.** The server owns every physics decision; Sable's
-  pose sync carries the result to clients. High-latency connections can show a
-  short delay before a derailment becomes visible.
-- **Compatibility with other Sable add-ons** (Create: Aeronautics, Offroad,
-  Simulated) is limited to projecting positions through Sable Companion so that
-  track lookups do not misread plot-grid coordinates. Their own physics bodies
-  are not merged with train carriages.
+- **Not yet validated in a live game.** The source is written against Create 6.0.10-281,
+  Sable 2.0.6 and NeoForge 21.1.228, but no jar built from this repository has been run in
+  a game yet. Expect to file the first integration bugs.
+- **No model or texture for the blocks yet.** Bogeys and couplers are drawn as plain
+  blocks (brass, andesite and copper casing). Their physics is real; their looks are not.
+- **Bogeys need an assembled sub-level.** They do nothing lying in the world, and this mod
+  does not ship an assembly tool: assemble with Create: Aeronautics, exactly like a ship.
+- **The rail contact is a servo, not a flange.** Guidance is a capped acceleration toward
+  the rail point, so there is no wheel lift, no axle load transfer and no slip curve per
+  axle. Tight S-bends are the place where this shows first.
+- **Couplers are mass independent.** Both ends are pushed by the same acceleration rather
+  than by equal and opposite forces, so a locomotive is not slowed by a wagon it outweighs
+  ten to one. On a mixed train the locomotive feels lighter than it is.
+- **One track lookup per bogey every `trackRecheckTicks`.** A lookup walks the graphs near
+  the vehicle; many bogeys in one place cost more than few, and a very long straight with
+  few nodes is searched node by node.
+- **The legacy train conversion** (`convertCreateTrains`) still exists and is still the
+  part that needed three mixins to hide a duplicate train. It is off by default and is not
+  the direction this mod is going.
+- **Sable's API is not semver-stable.** Types such as `ServerSubLevel`, `RigidBodyHandle`
+  and `BlockEntitySubLevelActor` may move between Sable releases.
 
 ## Why this is a separate mod
 
@@ -280,9 +258,10 @@ trademarks of Minecraft, Create and Sable belong to their respective owners.
 - The Create team for the train system and its migration API.
 - Zortifer's Ferronautics prototype, whose source made the limits of a
   kinematically driven sub-level obvious.
-- Crystaelix's Create: Simurail (MIT) for the physics-bogey reference model: rails
-  as a constraint with a finite grip, adhesion-limited traction and coupling as a
-  joint. No code from it is used here; the design was studied and reimplemented
+- Crystaelix's Create: Simurail (MIT) for the physics-bogey model this add-on now
+  implements: axles held on the rail with a finite grip, adhesion-limited traction,
+  derailment as a consequence of curvature and speed, and couplers between vehicles.
+  No code from it is used; its API calls and design were studied and reimplemented
   against this project's own abstractions.
 - The Create: Loconautics author for the clearest public statement of what a
   physical train should be: the train is the object, not a contraption that is

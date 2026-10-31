@@ -214,12 +214,17 @@ public final class SablePhysicsBackend implements PhysicsBackend {
                 return;
             }
 
-            // Rail forces are applied at the centre of mass, so no plot-space conversion is needed:
-            // Sable takes world-space vectors here and applies them to the body origin.
+            // Sable multiplies these vectors by the body rotation before handing them to Rapier, so
+            // they have to be given in plot space. They are computed in world space, which is why the
+            // quaternion is inverted here instead of in the controller.
             if (queuedForce.lengthSquared() > 0.0 || queuedTorque.lengthSquared() > 0.0) {
-                handle.applyLinearAndAngularImpulse(
-                        new Vector3d(queuedForce).mul(timeStep),
-                        new Vector3d(queuedTorque).mul(timeStep));
+                Vector3d localForce = subLevel.logicalPose()
+                        .transformNormalInverse(queuedForce)
+                        .mul(timeStep);
+                Vector3d localTorque = subLevel.logicalPose()
+                        .transformNormalInverse(queuedTorque)
+                        .mul(timeStep);
+                handle.applyLinearAndAngularImpulse(localForce, localTorque);
                 queuedForce.set(0.0);
                 queuedTorque.set(0.0);
             }
@@ -235,8 +240,9 @@ public final class SablePhysicsBackend implements PhysicsBackend {
             TractionModel.Result brake = TractionModel.evaluate(
                     new TractionModel.Demand(0.0, 1.0, speed, massProfile.mass()), tuning);
             double signedForce = rolling + brake.force();
-            Vector3d impulse = new Vector3d(velocity).normalize().mul(signedForce * timeStep);
-            handle.applyLinearAndAngularImpulse(impulse, new Vector3d());
+            Vector3d worldImpulse = new Vector3d(velocity).normalize().mul(signedForce * timeStep);
+            handle.applyLinearAndAngularImpulse(
+                    subLevel.logicalPose().transformNormalInverse(worldImpulse), new Vector3d());
         }
 
         /**

@@ -48,6 +48,18 @@ jobs:
               -f body="$(cat /tmp/report.md)" > /dev/null || true
             exit 1
           fi
+
+          {
+            printf '### build, commit `%s`\n\n' "${GITHUB_SHA:0:8}"
+            printf '`./gradlew build` succeeded.\n\n'
+            python3 tools/test_summary.py
+            printf '\n- jar: '
+            ls -l build/libs/*.jar 2>/dev/null | awk '{print $9 " (" int($5/1024) " KB)"}' | paste -sd ", " -
+            printf '\n'
+          } > /tmp/report.md
+          cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY"
+          gh api -X POST "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+            -f body="$(cat /tmp/report.md)" > /dev/null || true
         env:
           GH_TOKEN: ${{ github.token }}
       - name: upload jar
@@ -97,15 +109,31 @@ jobs:
           pkill -f "net.neoforged" 2>/dev/null || true
           echo "--- log tail ---"
           tail -120 /tmp/server.log
+          marker="Create Trains Sable: rail contact ready"
+          loaded=0
+          grep -qF "$marker" /tmp/server.log && loaded=1
           {
             printf '### dedicated server, commit `%s`\n\n' "${GITHUB_SHA:0:8}"
-            if [ "$ok" = "1" ]; then printf 'server reached `Done (`. Mod loaded, mixins applied.\n\n'; else printf 'server did **not** reach `Done (` (fatal=%s).\n\n' "$fatal"; fi
+            if [ "$ok" = "1" ]; then
+              printf 'server reached `Done (`.\n\n'
+            else
+              printf 'server did **not** reach `Done (` (fatal=%s).\n\n' "$fatal"
+            fi
+            if [ "$loaded" = "1" ]; then
+              printf 'the mod initialised: `%s`\n\n' "$marker"
+            else
+              printf 'the mod did **not** initialise (no `%s` in the log).\n\n' "$marker"
+            fi
             printf '```\n'
-            tail -160 /tmp/server.log
+            if [ "$ok" = "1" ] && [ "$loaded" = "1" ]; then
+              grep -E "Done \(|rail contact ready|Mixin apply failed|ERROR" /tmp/server.log | head -20
+            else
+              tail -160 /tmp/server.log
+            fi
             printf '```\n'
           } > /tmp/report.md
           gh api -X POST "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
             -f body="$(cat /tmp/report.md)" > /dev/null || true
-          grep -qiE "done \(" /tmp/server.log || exit 1
+          if [ "$ok" != "1" ] || [ "$loaded" != "1" ]; then exit 1; fi
         env:
           GH_TOKEN: ${{ github.token }}

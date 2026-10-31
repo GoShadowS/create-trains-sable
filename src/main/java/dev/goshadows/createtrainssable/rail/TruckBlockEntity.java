@@ -4,6 +4,7 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import dev.goshadows.createtrainssable.CreateTrainsSable;
 import dev.goshadows.createtrainssable.config.CTSConfig;
+import dev.goshadows.createtrainssable.config.TruckSettings;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
@@ -18,279 +19,203 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * The physics of one rail truck: find the rail under the axle, hold the axle on it, and pull the
- * vehicle along it with as much force as the wheels have grip for.
+ * One axle of a physical vehicle.
  *
- * <p>Everything runs on Sable's physics substeps, not on the game tick, and everything is applied as
- * a change in velocity. That makes the model mass independent - a heavy train is not slower than a
- * light one - and it means the body is never teleported, so a collision, a curve taken too fast or a
- * wall the train runs into all behave the way the engine says they should. Leaving the rail is not an
- * event this class raises; it is what happens when guidance stops being applied because the axle is
- * no longer over a rail.</p>
+ * <p>The truck does not move its vehicle. It reports what the wheel feels - the flange pushing back
+ * onto the rail, the motor pulling along it, the brake slowing it - as a force at the axle, and the
+ * physics engine integrates that. As a result a train can be blocked, pushed, overloaded or thrown
+ * off a curve, and the truck has no way to cheat: it can only ask.</p>
+ *
+ * <p>The state machine is deliberately small. An axle is either <em>guiding</em> (its wheel is on the
+ * rail and the flange can hold it) or <em>free</em> (it is not). Leaving the guide state is the
+ * derailment of that axle, and it happens for a physical reason: the axle is further from the rail
+ * than the flange allows, or the curve needs more lateral force than the flange can supply.</p>
+ *
+ * <p>Symbols: every length is in metres, every speed in m/s, every force in newtons.</p>
  */
 public class TruckBlockEntity extends KineticBlockEntity implements BlockEntitySubLevelActor {
 
-    /** Highest speed a driving truck is allowed to command, in m/s. */
-    private static final double HARD_SPEED_CAP = 60.0;
-
-    /**
-     * Ticks after the first physics step in which the truck is allowed to pull itself onto the
-     * rail instead of being called derailed. An assembled vehicle is never placed to the millimetre,
-     * and without this window the very first physics step would decide that the axle is off the
-     * rail and drop the whole train.
-     */
-    private static final int ATTACH_WINDOW_TICKS = 40;
-
-    /** How far the axle may be from the rail and still be pulled onto it while attaching. */
-    private static final double ATTACH_RADIUS = 3.0;
-
-    private RailPath rail;
-    private long railStamp = Long.MIN_VALUE;
+    /** Sub-ticks between two searches of the track graph; the contact follows the edge in between. */
+    private RailTrack track;
+    private long nextSearchTick = Long.MIN_VALUE;
     private long firstPhysicsTick = -1L;
-    private boolean reportedDerailment;
-    private boolean reportedNoRail;
-    private Vec3 lastVelocity = Vec3.ZERO;
+    private WheelRail.State state = WheelRail.State.NO_TRACK;
+    private Vec lastAxle = Vec.ZERO;
+    private double lastSpeed;
+    private double lastLateralError;
+    private WheelRail.State loggedState = WheelRail.State.NO_TRACK;
 
     public TruckBlockEntity(BlockPos pos, BlockState state) {
         super(CTSBlockEntities.TRUCK.get(), pos, state);
     }
 
-    public boolean isPowered() {
-        return getBlockState().getBlock() instanceof TruckBlock truck && truck.isDriven();
+    /** True for a truck that turns rotation into motion. */
+    public boolean isDriven() {
+        return getBlockState().getBlock() instanceof TruckBlock truck && truck.driven();
     }
 
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
-        // None: a truck is a wheel, not a machine with a menu.
+        // A truck is a wheel, not a machine with a menu.
     }
 
+    /**
+     * Looks for the rail once per game tick. The physics runs several times per tick and does not
+     * need to walk Create's graph that often; it only needs a contact to hold on to.
+     */
     @Override
-    public void sable$physicsTick(ServerSubLevel subLevel, RigidBodyHandle handle, double timeStep) {
+    public void sable$tick(ServerSubLevel subLevel) {
         if (level == null || level.isClientSide()) {
             return;
         }
         TruckSettings settings = CTSConfig.trucks();
-        Vec3 axle = axlePosition(subLevel);
+        long now = level.getGameTime();
+        if (now < nextSearchTick && track != null) {
+            return;
+        }
+        nextSearchTick = now + settings.trackRecheckTicks();
+        Vec axle = axlePosition(subLevel);
+        Optional<RailTrack> found = RailTrack.find(subLevel.getLevel(), axle, track,
+                settings.maxLateralError() * 2.0 + 1.0, settings.scanRadius());
+        track = found.orElse(null);
+        if (track == null && state != WheelRail.State.NO_TRACK) {
+            log(WheelRail.State.NO_TRACK);
+        }
+    }
 
+    @Override
+    public void sable$physicsTick(ServerSubLevel subLevel, RigidBodyHandle handle, double timeStep) {
+        if (level == null || level.isClientSide() || handle == null || !handle.isValid()) {
+            return;
+        }
+        TruckSettings settings = CTSConfig.trucks();
         long now = level.getGameTime();
         if (firstPhysicsTick < 0L) {
             firstPhysicsTick = now;
         }
-        // Freshly assembled: the axle still has to settle onto the rail head, so the off-rail test
-        // is suspended for a moment. Overspeed is not: a curve taken too fast is a derailment even
-        // in the first second.
-        boolean attaching = now - firstPhysicsTick < ATTACH_WINDOW_TICKS;
+        double secondsSinceAssembly = (now - firstPhysicsTick) / 20.0;
 
-        rail = refreshRail(subLevel, axle, settings);
-
+        Vec axle = axlePosition(subLevel);
         Vector3dc rawVelocity = handle.getLinearVelocity(new Vector3d());
-        Vec3 velocity = new Vec3(rawVelocity.x(), rawVelocity.y(), rawVelocity.z());
-        lastVelocity = velocity;
+        Vec velocity = new Vec(rawVelocity.x(), rawVelocity.y(), rawVelocity.z());
+        Vector3dc rawSpin = handle.getAngularVelocity(new Vector3d());
+        Vec spin = new Vec(rawSpin.x(), rawSpin.y(), rawSpin.z());
 
-        double targetSpeed = targetSpeed();
-        int trucks = countTrucks(subLevel);
-        int driven = countDrivenTrucks(subLevel);
-        Vec3 deltaVelocity = Vec3.ZERO;
-        Vec3 deltaAngular = Vec3.ZERO;
-
-        if (rail != null) {
-            double lateral = rail.lateralError(axle);
-            double vertical = rail.verticalError(axle);
-            double speed = rail.speedAlong(velocity);
-
-            boolean offRail = Math.abs(lateral) > settings.maxLateralError()
-                    || Math.abs(vertical) > settings.maxVerticalError();
-            boolean tooFast = rail.isOverspeed(Math.abs(speed), settings.curveLateralLimit());
-
-            boolean withinReach = Math.abs(lateral) <= ATTACH_RADIUS
-                    && Math.abs(vertical) <= ATTACH_RADIUS;
-            if (!tooFast && (!offRail || (attaching && withinReach))) {
-                // Either the axle is on the rail, or this is the moment the vehicle is assembled and
-                // the guidance has to bring the axle onto it. From here on the truck is held on the
-                // rail by force only: nothing is teleported, so a wall or a curve can win.
-                reportedDerailment = false;
-                reportedNoRail = false;
-                deltaVelocity = guidance(rail, velocity, axle, settings, trucks, timeStep)
-                        .add(rail.tangent().scale(
-                                longitudinal(speed, targetSpeed, settings, driven) * timeStep));
-                deltaAngular = alignment(subLevel, rail, handle, settings, timeStep);
-            } else {
-                // The axle is not on the rail any more, or the curve cannot hold the vehicle.
-                // Guidance simply stops; the body keeps its momentum and becomes a wreck.
-                if (!reportedDerailment) {
-                    reportedDerailment = true;
-                    CreateTrainsSable.LOGGER.info(
-                            "Rail truck at {} left the rails: lateral={}, vertical={}, speed={}, "
-                                    + "curvature={}",
-                            worldPosition, String.format("%.2f", lateral),
-                            String.format("%.2f", vertical), String.format("%.2f", speed),
-                            String.format("%.4f", rail.curvature()));
-                }
-            }
-        } else {
-            reportedDerailment = false;
-            if (!reportedNoRail) {
-                reportedNoRail = true;
-                CreateTrainsSable.LOGGER.info(
-                        "Rail truck at {} found no track within {} blocks; the vehicle is free",
-                        worldPosition, String.format("%.1f", settings.scanRadius()));
+        // Between searches the contact rides along the edge under the wheel.
+        if (track != null) {
+            double along = track.speedAlong(velocity);
+            RailTrack moved = track.advanced(along * timeStep, axle);
+            if (moved != null) {
+                track = moved;
             }
         }
 
-        if (deltaVelocity.lengthSqr() > 0.0 || deltaAngular.lengthSqr() > 0.0) {
-            handle.addLinearAndAngularVelocity(
-                    new Vector3d(deltaVelocity.x, deltaVelocity.y, deltaVelocity.z),
-                    new Vector3d(deltaAngular.x, deltaAngular.y, deltaAngular.z));
+        int trucks = countTrucks(subLevel, false);
+        int driven = countTrucks(subLevel, true);
+        double mass = vehicleMass(subLevel);
+        double target = isDriven()
+                ? WheelRail.targetSpeed(getSpeed(), facingSign(), settings)
+                : 0.0;
+
+        WheelRail.Output output = WheelRail.solve(track, axle, velocity, forward(subLevel), spin,
+                target, isDriven(), trucks, driven, mass, secondsSinceAssembly, settings);
+        state = output.state();
+        lastAxle = axle;
+        lastSpeed = track == null ? 0.0 : track.speedAlong(velocity);
+        lastLateralError = output.lateralError();
+
+        if (output.guiding()) {
+            apply(subLevel, handle, axle, output, timeStep);
+        }
+        if (output.state() != loggedState) {
+            log(output.state());
         }
     }
 
-    /**
-     * Lateral and vertical hold, with gravity cancelled so the truck sits on the rail head.
-     *
-     * <p>Gravity is divided between the trucks of the vehicle: each one corrects its own axle, but
-     * the weight of the vehicle is one weight, and a vehicle with four trucks would otherwise be
-     * pushed up four times as hard as it is pulled down.</p>
-     */
-    private Vec3 guidance(RailPath rail, Vec3 velocity, Vec3 axle, TruckSettings settings,
-                          int trucks, double timeStep) {
-        double lateralError = rail.lateralError(axle);
-        double verticalError = rail.verticalError(axle);
-        double lateralSpeed = velocity.dot(rail.lateral());
-        double verticalSpeed = velocity.dot(rail.normal());
-
-        double lateral = -settings.guideStiffness() * lateralError
-                - settings.guideDamping() * lateralSpeed;
-        double vertical = -settings.guideStiffness() * verticalError
-                - settings.guideDamping() * verticalSpeed
-                + settings.gravity() / Math.max(1, trucks);
-
-        double magnitude = Math.sqrt(lateral * lateral + vertical * vertical);
-        double limit = settings.maxGuideAcceleration();
-        if (magnitude > limit) {
-            double scale = limit / magnitude;
-            lateral *= scale;
-            vertical *= scale;
+    /** Turns the contact force into an impulse at the axle, and the steering into angular velocity. */
+    private void apply(ServerSubLevel subLevel, RigidBodyHandle handle, Vec axle,
+                       WheelRail.Output output, double timeStep) {
+        Vec worldImpulse = output.force().scale(timeStep);
+        if (worldImpulse.lengthSqr() > 0.0) {
+            // The handle takes plot-local vectors: the pipeline rotates them by the body orientation.
+            Vector3d localImpulse = subLevel.logicalPose().transformNormalInverse(
+                    new Vector3d(worldImpulse.x(), worldImpulse.y(), worldImpulse.z()));
+            Vector3d axleInPlot = subLevel.logicalPose().transformPositionInverse(
+                    new Vector3d(axle.x(), axle.y(), axle.z()), new Vector3d());
+            handle.applyImpulseAtPoint(axleInPlot, localImpulse);
         }
-
-        return rail.lateral().scale(lateral * timeStep).add(rail.normal().scale(vertical * timeStep));
+        Vec angular = output.angularAcceleration();
+        if (angular.lengthSqr() > 0.0) {
+            Vec delta = angular.scale(timeStep);
+            handle.addLinearAndAngularVelocity(new Vector3d(),
+                    new Vector3d(delta.x(), delta.y(), delta.z()));
+        }
     }
 
-    /**
-     * Traction and braking along the rail, capped by the grip of the wheels.
-     *
-     * <p>The demand is shared between the driving trucks of the vehicle for the same reason gravity
-     * is: two driven trucks pull twice as hard as one, and the point of putting more trucks under a
-     * heavy train is reliability, not doubling its acceleration.</p>
-     */
-    private double longitudinal(double speed, double targetSpeed, TruckSettings settings,
-                                int driven) {
-        if (!isPowered()) {
-            // A rolling truck only coasts: rolling resistance, and the brake when it is asked to hold.
-            return clamp(-speed * 0.8, -settings.brakeAcceleration(), 0.0);
-        }
-        double difference = targetSpeed - speed;
-        double demand = difference * 4.0 / Math.max(1, driven);
-        return clamp(demand, -settings.brakeAcceleration(), settings.tractionAcceleration());
-    }
-
-    private static int countTrucks(ServerSubLevel subLevel) {
-        int count = 0;
-        for (BlockEntitySubLevelActor actor : subLevel.getPlot().getBlockEntityActors()) {
-            if (actor instanceof TruckBlockEntity) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private static int countDrivenTrucks(ServerSubLevel subLevel) {
-        int count = 0;
-        for (BlockEntitySubLevelActor actor : subLevel.getPlot().getBlockEntityActors()) {
-            if (actor instanceof TruckBlockEntity truck && truck.isPowered()) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    /** Turns the vehicle so that its facing follows the rail. */
-    private Vec3 alignment(ServerSubLevel subLevel, RailPath rail, RigidBodyHandle handle,
-                           TruckSettings settings, double timeStep) {
+    /** World direction the truck faces: the axle runs across it. */
+    private Vec forward(ServerSubLevel subLevel) {
         Direction facing = getBlockState().getValue(TruckBlock.FACING);
         Vec3 local = new Vec3(facing.getStepX(), facing.getStepY(), facing.getStepZ());
-        Vec3 forward = subLevel.logicalPose().transformNormal(local);
-        if (forward.lengthSqr() < 1.0e-8) {
-            return Vec3.ZERO;
-        }
-        forward = forward.normalize();
-
-        double sign = forward.dot(rail.tangent()) >= 0.0 ? 1.0 : -1.0;
-        Vec3 wanted = rail.tangent().scale(sign);
-        Vec3 axis = forward.cross(wanted);
-
-        Vector3dc angular = handle.getAngularVelocity(new Vector3d());
-        Vec3 spin = new Vec3(angular.x(), angular.y(), angular.z());
-
-        Vec3 angularDelta = axis.scale(settings.alignGain())
-                .subtract(spin.scale(settings.alignDamping()));
-        double magnitude = angularDelta.length();
-        double limit = settings.maxAngularAcceleration();
-        if (magnitude > limit) {
-            angularDelta = angularDelta.scale(limit / magnitude);
-        }
-        return angularDelta.scale(timeStep);
+        return Vec.of(subLevel.logicalPose().transformNormal(local));
     }
 
-    /** World position of the axle, i.e. the point that has to stay on the rail. */
-    private Vec3 axlePosition(ServerSubLevel subLevel) {
-        Vector3d local = new Vector3d(
-                worldPosition.getX() + 0.5,
-                worldPosition.getY() + 0.25,
+    /** Which way the vehicle goes when the shaft turns forwards. */
+    private double facingSign() {
+        Direction facing = getBlockState().getValue(TruckBlock.FACING);
+        return facing.getStepX() + facing.getStepZ() >= 0 ? 1.0 : -1.0;
+    }
+
+    /** World position of the axle: the point that has to stay on the rail. */
+    public Vec axlePosition(ServerSubLevel subLevel) {
+        Vector3d local = new Vector3d(worldPosition.getX() + 0.5, worldPosition.getY() + 0.25,
                 worldPosition.getZ() + 0.5);
         Vector3d world = subLevel.logicalPose().transformPosition(local, new Vector3d());
-        return new Vec3(world.x(), world.y(), world.z());
+        return new Vec(world.x(), world.y(), world.z());
     }
 
-    /** Speed the truck tries to reach, in m/s, signed by the facing and by the rotation. */
-    private double targetSpeed() {
-        if (!isPowered()) {
-            return 0.0;
-        }
-        float rpm = getSpeed();
-        if (Math.abs(rpm) < 1.0e-3) {
-            return 0.0;
-        }
-        Direction facing = getBlockState().getValue(TruckBlock.FACING);
-        double speed = rpm * CTSConfig.trucks().speedPerRpm();
-        // The facing decides which way the vehicle goes when the shaft turns one way, exactly like
-        // the direction of a car's wheels would.
-        double sign = facing.getStepX() + facing.getStepZ() >= 0 ? 1.0 : -1.0;
-        return clamp(speed * sign, -HARD_SPEED_CAP, HARD_SPEED_CAP);
+    private static double vehicleMass(ServerSubLevel subLevel) {
+        double mass = subLevel.getMassTracker().getMass();
+        return Double.isFinite(mass) && mass > 1.0e-3 ? mass : 1.0;
     }
 
-    private RailPath refreshRail(ServerSubLevel subLevel, Vec3 axle, TruckSettings settings) {
-        long now = subLevel.getLevel().getGameTime();
-        if (rail != null && now - railStamp < settings.trackRecheckTicks()) {
-            return rail;
+    private static int countTrucks(ServerSubLevel subLevel, boolean onlyDriven) {
+        int count = 0;
+        for (BlockEntitySubLevelActor actor : subLevel.getPlot().getBlockEntityActors()) {
+            if (actor instanceof TruckBlockEntity truck && (!onlyDriven || truck.isDriven())) {
+                count++;
+            }
         }
-        railStamp = now;
-        Optional<RailPath> found = RailPath.nearest(subLevel.getLevel(), axle,
-                settings.maxLateralError() * 2.0 + 1.0, settings.scanRadius());
-        return found.orElse(null);
+        return count;
     }
 
-    /** Last measured velocity of the vehicle. */
-    public Vec3 lastVelocity() {
-        return lastVelocity;
+    private void log(WheelRail.State next) {
+        loggedState = next;
+        if (!CTSConfig.trucks().debugLog()) {
+            return;
+        }
+        switch (next) {
+            case GUIDING -> CreateTrainsSable.LOGGER.info(
+                    "Truck {} holds the rail: lateral={}, speed={}", worldPosition,
+                    String.format("%.2f", lastLateralError), String.format("%.2f", lastSpeed));
+            case NO_TRACK -> CreateTrainsSable.LOGGER.info(
+                    "Truck {} found no rail within reach; the vehicle is free", worldPosition);
+            case OFF_RAIL -> CreateTrainsSable.LOGGER.info(
+                    "Truck {} left the rail: lateral={}, at {}", worldPosition,
+                    String.format("%.2f", lastLateralError), lastAxle);
+            case OVERSPEED -> CreateTrainsSable.LOGGER.info(
+                    "Truck {} is too fast for the curve: speed={}, at {}", worldPosition,
+                    String.format("%.2f", lastSpeed), lastAxle);
+        }
+    }
+
+    /** Current contact state of this axle; used by diagnostics and by tests. */
+    public WheelRail.State state() {
+        return state;
     }
 
     @Override
     public void invalidate() {
-        rail = null;
+        track = null;
         super.invalidate();
-    }
-
-    private static double clamp(double value, double min, double max) {
-        return Math.max(min, Math.min(max, value));
     }
 }

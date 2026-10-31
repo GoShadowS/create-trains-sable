@@ -2,7 +2,9 @@ package dev.goshadows.createtrainssable.rail;
 
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import dev.goshadows.createtrainssable.CreateTrainsSable;
 import dev.goshadows.createtrainssable.config.CTSConfig;
+import dev.goshadows.createtrainssable.config.TruckSettings;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
@@ -13,21 +15,22 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
-import org.joml.Vector3dc;
 
 import javax.annotation.Nullable;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * One half of a spring coupling.
+ * One half of a spring coupling between two vehicles.
  *
- * <p>A coupling finds its partner by looking for another one a couple of blocks away, facing back at
- * it and living on a different sub-level. The distance at the moment the link is made becomes the
- * rest length, so hooking up never yanks the vehicles together.</p>
+ * <p>Two couplings facing each other within a couple of blocks hook up on their own. The link is a
+ * spring and a damper along the line between the two coupling faces, and the force it makes is
+ * applied to <em>both</em> bodies as one impulse and its opposite. That equality is the whole point:
+ * a locomotive is held back by the wagons it pulls, which is what a coupling does and what an
+ * acceleration applied to each end separately never does.</p>
  *
- * <p>The spring is expressed in acceleration rather than force so that it stays stable at the physics
- * rate Sable runs at and so that a heavy wagon is not coupled more loosely than a light one.</p>
+ * <p>Only the lower of the two block positions applies the pair, so a link is never counted twice.
+ * Both ends find each other symmetrically, so either may be the one that does the work.</p>
  */
 public class SpringCouplingBlockEntity extends SmartBlockEntity implements BlockEntitySubLevelActor {
 
@@ -41,14 +44,21 @@ public class SpringCouplingBlockEntity extends SmartBlockEntity implements Block
     private int relinkCountdown;
     private boolean linkedReported;
 
+    @Nullable
+    private transient ServerSubLevel ownSubLevel;
+    @Nullable
+    private transient RigidBodyHandle ownHandle;
+
     public SpringCouplingBlockEntity(BlockPos pos, BlockState state) {
         super(CTSBlockEntities.COUPLING.get(), pos, state);
     }
 
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        // Nothing to configure on the block itself.
     }
 
+    /** A coupling only needs to look for a partner occasionally; the spring itself runs on physics. */
     @Override
     public void tick() {
         super.tick();
@@ -60,116 +70,98 @@ public class SpringCouplingBlockEntity extends SmartBlockEntity implements Block
             return;
         }
         relinkCountdown = RELINK_INTERVAL;
-        validatePartner();
-    }
-
-    /** Drops a link whose partner is gone, or whose sub-levels were unloaded. */
-    private void validatePartner() {
         if (partnerPos == null) {
-            return;
+            tryLink();
+        } else {
+            validatePartner();
         }
-        if (level.getBlockEntity(partnerPos) instanceof SpringCouplingBlockEntity other) {
-            if (other.partnerPos != null && other.partnerPos.equals(worldPosition)) {
-                return;
-            }
-        }
-        partnerPos = null;
-        partnerSubLevel = null;
-        restLength = -1.0;
-        linkedReported = false;
     }
 
     @Override
     public void sable$physicsTick(ServerSubLevel subLevel, RigidBodyHandle handle, double timeStep) {
-        if (level == null || level.isClientSide()) {
+        ownSubLevel = subLevel;
+        ownHandle = handle;
+        if (level == null || level.isClientSide() || partnerPos == null || !handle.isValid()) {
             return;
         }
-        TruckSettings settings = CTSConfig.trucks();
-
-        if (partnerPos == null) {
-            tryLink(subLevel, settings);
-            if (partnerPos == null) {
-                return;
-            }
+        // One owner per link, or the spring would be applied twice and be twice as stiff.
+        if (worldPosition.compareTo(partnerPos) > 0) {
+            return;
         }
-
         if (!(level.getBlockEntity(partnerPos) instanceof SpringCouplingBlockEntity other)) {
-            partnerPos = null;
-            partnerSubLevel = null;
-            restLength = -1.0;
+            unlink();
             return;
         }
-        if (!(other.level != null && other.level.getBlockEntity(other.worldPosition) == other)) {
+        ServerSubLevel otherSubLevel = other.ownSubLevel;
+        RigidBodyHandle otherHandle = other.ownHandle;
+        if (otherSubLevel == null || otherHandle == null || !otherHandle.isValid()
+                || otherSubLevel == subLevel) {
             return;
         }
 
         Vec3 here = couplingPoint(subLevel);
-        Vec3 there = other.couplingPoint(other.containingSubLevel());
+        Vec3 there = other.couplingPoint(otherSubLevel);
         if (here == null || there == null) {
             return;
         }
-
-        Vec3 delta = there.subtract(here);
-        double distance = delta.length();
+        Vec3 axis = there.subtract(here);
+        double distance = axis.length();
         if (distance < 1.0e-4) {
             return;
         }
+        axis = axis.scale(1.0 / distance);
         if (restLength < 0.0) {
             restLength = distance;
         }
 
-        Vec3 axis = delta.scale(1.0 / distance);
-        Vec3 ownVelocity = toVec(handle.getLinearVelocity(new Vector3d()));
-        Vec3 otherVelocity = other.velocity();
-
         double extension = distance - restLength;
-        double closing = otherVelocity.subtract(ownVelocity).dot(axis);
+        double closing = velocity(handle).subtract(velocity(otherHandle)).dot(axis);
+        double ownMass = Math.max(1.0e-3, subLevel.getMassTracker().getMass());
+        double otherMass = Math.max(1.0e-3, otherSubLevel.getMassTracker().getMass());
+        double effectiveMass = ownMass * otherMass / (ownMass + otherMass);
+
+        TruckSettings settings = CTSConfig.trucks();
         double acceleration = extension * settings.couplingStiffness()
                 + closing * settings.couplingDamping();
         double limit = settings.couplingMaxAcceleration();
         acceleration = Math.max(-limit, Math.min(limit, acceleration));
 
-        // Only this end is pushed here: the partner runs the same calculation from its own physics
-        // tick and pushes itself. Doing both sides from one end would double the spring.
-        Vec3 deltaVelocity = axis.scale(acceleration * timeStep);
-        handle.addLinearAndAngularVelocity(toVector(deltaVelocity), new Vector3d());
+        // Equal and opposite: what the vehicle in front gains, the one behind loses.
+        Vec3 impulse = axis.scale(acceleration * effectiveMass * timeStep);
+        applyImpulse(subLevel, handle, here, impulse);
+        applyImpulse(otherSubLevel, otherHandle, there, impulse.scale(-1.0));
+    }
+
+    /** Applies a world impulse at a world point, converting both to the plot frame Sable expects. */
+    private static void applyImpulse(ServerSubLevel subLevel, RigidBodyHandle handle, Vec3 point,
+                                     Vec3 impulse) {
+        Vector3d localImpulse = subLevel.logicalPose()
+                .transformNormalInverse(new Vector3d(impulse.x, impulse.y, impulse.z));
+        Vector3d pointInPlot = subLevel.logicalPose()
+                .transformPositionInverse(new Vector3d(point.x, point.y, point.z), new Vector3d());
+        handle.applyImpulseAtPoint(pointInPlot, localImpulse);
+    }
+
+    private static Vec3 velocity(RigidBodyHandle handle) {
+        Vector3d velocity = handle.getLinearVelocity(new Vector3d());
+        return new Vec3(velocity.x, velocity.y, velocity.z);
     }
 
     /** World position of the coupling face. */
     @Nullable
-    private Vec3 couplingPoint(@Nullable ServerSubLevel subLevel) {
-        if (subLevel == null) {
-            return null;
-        }
+    private Vec3 couplingPoint(ServerSubLevel subLevel) {
         Direction facing = getBlockState().getValue(SpringCouplingBlock.FACING);
         Vector3d local = new Vector3d(
                 worldPosition.getX() + 0.5 + facing.getStepX() * 0.5,
                 worldPosition.getY() + 0.5,
                 worldPosition.getZ() + 0.5 + facing.getStepZ() * 0.5);
         Vector3d world = subLevel.logicalPose().transformPosition(local, new Vector3d());
-        return new Vec3(world.x(), world.y(), world.z());
-    }
-
-    private Vec3 velocity() {
-        ServerSubLevel subLevel = containingSubLevel();
-        if (subLevel == null) {
-            return Vec3.ZERO;
-        }
-        RigidBodyHandle handle = RigidBodyHandle.of(subLevel);
-        if (handle == null || !handle.isValid()) {
-            return Vec3.ZERO;
-        }
-        return toVec(handle.getLinearVelocity(new Vector3d()));
-    }
-
-    @Nullable
-    private ServerSubLevel containingSubLevel() {
-        return dev.ryanhcode.sable.Sable.HELPER.getContaining(this) instanceof ServerSubLevel server
-                ? server : null;
+        return new Vec3(world.x, world.y, world.z);
     }
 
     /** Finds a coupling facing back at this one within range, on another vehicle. */
-    private void tryLink(ServerSubLevel subLevel, TruckSettings settings) {
+    private void tryLink() {
+        TruckSettings settings = CTSConfig.trucks();
         Direction facing = getBlockState().getValue(SpringCouplingBlock.FACING);
         int range = (int) Math.ceil(settings.couplingRange());
         for (BlockPos pos : BlockPos.betweenClosed(worldPosition.offset(range, 1, range),
@@ -180,34 +172,53 @@ public class SpringCouplingBlockEntity extends SmartBlockEntity implements Block
             if (!(level.getBlockEntity(pos) instanceof SpringCouplingBlockEntity other)) {
                 continue;
             }
-            ServerSubLevel otherSubLevel = other.containingSubLevel();
-            if (otherSubLevel == null || otherSubLevel == subLevel) {
+            if (other.partnerPos != null || other.ownSubLevel == null || ownSubLevel == null) {
                 continue;
             }
-            Direction otherFacing = other.getBlockState().getValue(SpringCouplingBlock.FACING);
-            // Couplings only hook up mouth to mouth.
-            if (otherFacing != facing.getOpposite()) {
+            if (other.ownSubLevel == ownSubLevel) {
                 continue;
             }
-            Vec3 here = couplingPoint(subLevel);
-            Vec3 there = other.couplingPoint(otherSubLevel);
+            if (other.getBlockState().getValue(SpringCouplingBlock.FACING) != facing.getOpposite()) {
+                continue;
+            }
+            Vec3 here = couplingPoint(ownSubLevel);
+            Vec3 there = other.couplingPoint(other.ownSubLevel);
             if (here == null || there == null || here.distanceTo(there) > settings.couplingRange()) {
                 continue;
             }
             partnerPos = pos.immutable();
-            partnerSubLevel = otherSubLevel.getUniqueId();
+            partnerSubLevel = other.ownSubLevel.getUniqueId();
             restLength = here.distanceTo(there);
             other.partnerPos = worldPosition.immutable();
-            other.partnerSubLevel = subLevel.getUniqueId();
+            other.partnerSubLevel = ownSubLevel.getUniqueId();
             other.restLength = restLength;
             if (!linkedReported) {
                 linkedReported = true;
-                dev.goshadows.createtrainssable.CreateTrainsSable.LOGGER.info(
-                        "Couplings linked: {} <-> {} (rest length {})",
-                        worldPosition, partnerPos, String.format("%.2f", restLength));
+                CreateTrainsSable.LOGGER.info("Couplings linked: {} <-> {} (rest length {})",
+                        worldPosition, pos, String.format("%.2f", restLength));
             }
             return;
         }
+    }
+
+    /** Drops a link whose partner is gone or has been unloaded. */
+    private void validatePartner() {
+        if (partnerPos == null) {
+            return;
+        }
+        if (level.getBlockEntity(partnerPos) instanceof SpringCouplingBlockEntity other
+                && worldPosition.equals(other.partnerPos)) {
+            return;
+        }
+        CreateTrainsSable.LOGGER.info("Coupling at {} lost its partner", worldPosition);
+        unlink();
+    }
+
+    private void unlink() {
+        partnerPos = null;
+        partnerSubLevel = null;
+        restLength = -1.0;
+        linkedReported = false;
     }
 
     @Override
@@ -228,13 +239,5 @@ public class SpringCouplingBlockEntity extends SmartBlockEntity implements Block
         partnerPos = tag.contains("PartnerPos") ? BlockPos.of(tag.getLong("PartnerPos")) : null;
         partnerSubLevel = tag.hasUUID("PartnerSubLevel") ? tag.getUUID("PartnerSubLevel") : null;
         restLength = tag.contains("RestLength") ? tag.getDouble("RestLength") : -1.0;
-    }
-
-    private static Vec3 toVec(Vector3dc vector) {
-        return new Vec3(vector.x(), vector.y(), vector.z());
-    }
-
-    private static Vector3d toVector(Vec3 vector) {
-        return new Vector3d(vector.x, vector.y, vector.z);
     }
 }

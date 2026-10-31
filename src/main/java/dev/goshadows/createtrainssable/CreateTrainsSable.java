@@ -2,9 +2,6 @@ package dev.goshadows.createtrainssable;
 
 import com.mojang.logging.LogUtils;
 import dev.goshadows.createtrainssable.config.CTSConfig;
-import dev.goshadows.createtrainssable.derailment.DerailmentController;
-import dev.goshadows.createtrainssable.integration.BackendLoader;
-import dev.goshadows.createtrainssable.integration.PhysicsBackend;
 import dev.goshadows.createtrainssable.rail.CTSBlockEntities;
 import dev.goshadows.createtrainssable.rail.CTSBlocks;
 import dev.goshadows.createtrainssable.rail.CTSCreativeTab;
@@ -15,13 +12,19 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import org.slf4j.Logger;
 
+/**
+ * Entry point.
+ *
+ * <p>The mod has one job: a vehicle built by the player becomes a Sable structure and is driven
+ * through the wheel/rail contact of its trucks. There is no second representation of a train, no
+ * conversion step and nothing to keep in sync, so the mod only registers its blocks, its items and
+ * its configuration here.</p>
+ */
 @Mod(CreateTrainsSable.MOD_ID)
 public final class CreateTrainsSable {
 
     public static final String MOD_ID = "createtrainssable";
     public static final Logger LOGGER = LogUtils.getLogger();
-
-    private static volatile DerailmentController controller;
 
     public CreateTrainsSable(IEventBus modBus, ModContainer modContainer) {
         CTSBlocks.register(modBus);
@@ -29,13 +32,6 @@ public final class CreateTrainsSable {
         CTSItems.register(modBus);
         CTSCreativeTab.register(modBus);
         modContainer.registerConfig(ModConfig.Type.SERVER, CTSConfig.SPEC, MOD_ID + "-server.toml");
-        PhysicsBackend backend = BackendLoader.load();
-        controller = new DerailmentController(backend);
-        LOGGER.info("Create Trains Sable ready; physics backend: {}", backend.description());
-    }
-
-    /** Null only before FML constructs the mod, which mixins never see in practice. */
-    public static DerailmentController controller() {
-        return controller;
+        LOGGER.info("Create Trains Sable: rail contact ready; trucks drive their own body");
     }
 }

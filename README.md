@@ -1,156 +1,130 @@
 # Create Trains Sable
 
-**Physics trains for Create.** Assemble a train and it is already a physical object:
-every carriage becomes a Sable sub-level the moment it is built, held on the rails by
-wheel forces until the rails lose it. Build your own vehicle instead and it works the
-same way - rail trucks under the frame, a shaft for power, and it rolls as one rigid
-body that takes curves, slips, couples to wagons and derails when it is going too fast
-for the bend it is in.
+**Physical rail vehicles for Create.** A vehicle is a Sable structure, and its axles are the only
+thing that holds it on the rails: real wheel/rail contact, adhesion-limited traction, curves that
+can throw it off, and spring couplings that hold two vehicles together with equal and opposite
+force.
 
-Minecraft 1.21.1 · NeoForge · Create 6.0.10 · Sable 2.0
+Minecraft 1.21.1 · NeoForge · Create 6.0.10 · Sable 2.0 · Java 21
 
 ---
 
-## Features
+## What the mod is
 
-- **Physical on assembly.** A train assembled in a station, or loaded from a save, is a
-  Sable structure within a second - not a contraption that waits for a crash to become
-  one. It stays attached to the rail under its wheels until the wheels leave it.
-- **Trains that are objects, not animations.** The vehicle you built *is* the train: one
-  body, one collision shape, one thing to walk on, push, load with cargo and crash.
-  Create still owns the schedule, the seats and the route; the physics owns the motion.
-- **Real traction.** Speed comes from rotation, not from a number in a menu. Wheel grip
-  caps acceleration, brakes cap deceleration, and a heavy train accelerates like a heavy
-  train.
-- **Real curves.** Guidance is limited by the flange load the rail can take. Take a bend
-  too fast and the trucks stop holding the vehicle - it keeps its momentum and becomes a
-  wreck where physics put it.
-- **Spring couplings.** Two couplings facing each other hook up on their own and hold the
-  vehicles with a spring and a damper, so a locomotive pulls its wagons and a shunt at the
-  back is felt at the front.
-- **No teleporting, ever.** Nothing snaps the vehicle back onto a track, because nothing
-  writes a position into it: every tick only velocity and angular velocity change.
-
-## Blocks
+There is exactly one representation of a vehicle: the Sable sub-level the player assembled. The
+mod adds three blocks that go on that structure and one rule that governs them - **the physics owns
+the motion, the blocks only push**.
 
 | Block | What it does |
 | --- | --- |
-| **Traction Truck** | Driven axle. Takes rotary power on its axle axis; the shaft's speed is the speed it tries to reach. |
-| **Rolling Truck** | Carries weight and rolls. Use as many as the train needs. |
-| **Spring Coupling** | Links two vehicles that are close enough and facing each other. |
+| **Traction Truck** | A driven axle. Takes rotation on its axle axis and pulls the vehicle along the rail. |
+| **Rolling Truck** | An idler axle. Carries its share of the weight, rolls, and brakes. |
+| **Spring Coupling** | Links two vehicles that face each other. The link is a spring and a damper, applied to both bodies. |
 
-Each truck is a low steel frame with a riveted waist and a wheel on both sides of the
-axle. The driven one carries a red motor housing on top of the frame; the idler only has a
-bolted cover, so a powered axle and an idler axle never look the same from across the
-track. The coupling is a cast buffer plate with a coil spring reaching towards the vehicle
-in front of it.
-
-All three are in the mod's own creative tab.
-
-## Building a train
-
-1. Build the vehicle out of ordinary blocks.
-2. Put **traction trucks** and **rolling trucks** where the wheels belong, pointing the
-   way the vehicle should move when the shaft turns forwards. At least one must be driven.
-3. Give the driven trucks rotation - a shaft or a cogwheel from a motor, a boiler or a
-   mechanical bearing.
-4. Assemble the whole thing into a sub-level with Create: Aeronautics' assembly tooling,
-   exactly like a ship or an airship.
-5. For a multi-vehicle train, add a **spring coupling** to the end of each vehicle.
-
-A full speed shaft (256 RPM) is about 12.8 blocks per second with the default gearing;
-32 RPM is about 1.6.
+Build the vehicle, put trucks under the frame where the axles belong, power the driven ones, add
+couplings to the ends, and assemble the whole thing into a sub-level. From the first physics step
+the vehicle is a rigid body held on Create's rails by force - there is no second copy of it, no
+hidden contraption, and nothing that teleports it.
 
 ## How it works
 
-Each truck finds the nearest piece of Create track under its axle, with the tangent, the
-up direction and the curvature of the rail at that point - straight track and Bezier
-turns alike. On every physics substep it then:
+Every physics substep, every truck does three things and reports them as a force:
 
-1. holds its axle on the rail with a limited acceleration, plus gravity compensation
-   shared between the vehicle's trucks;
-2. turns the body so its facing follows the rail;
-3. pushes along the rail with traction up to the grip of the wheels, and brakes up to the
-   brake rating - shared between the driven trucks.
+1. **Flange.** A spring-damper in the plane across the rail pushes the axle back onto the rail head.
+   It is clamped: the rail can only push so hard before the flange climbs.
+2. **Traction.** A driven axle tries to reach the speed its shaft asks for; an idler only rolls and
+   brakes. Both are capped by the adhesion of the wheel, so a heavy vehicle accelerates slowly and a
+   locomotive cannot pull what it has no grip for.
+3. **Steering.** The axle turns the body so its facing follows the tangent of the rail.
 
-If the axle ends up further from the rail than the flange allows, or the curvature times
-speed squared exceeds the flange limit, the truck simply stops guiding. That is the whole
-derailment model: a train derails because the physics ran out of grip, not because a
-threshold decided it should.
+The force is applied at the axle, not at the centre of mass, so a truck under the front of a vehicle
+turns it and a truck under the back holds it straight - which is what a bogey does.
+
+### Derailment
+
+An axle is either holding the rail or it is not, and it stops holding for a physical reason:
+
+- the axle is further from the rail head than the flange allows (`maxLateralError`,
+  `maxVerticalError`), or
+- the curve needs more lateral force than the flange can supply
+  (`curvature * speed^2 > curveLateralLimit`).
+
+When no axle holds the vehicle any more, nothing pushes it and the physics engine does the rest:
+it keeps its momentum, hits what is in the way, and comes to rest where it lands. There is no
+scripted crash and no wreck entity.
+
+### Couplings
+
+Two couplings facing each other within range link on their own. The distance at the moment of
+linking is the rest length, so hooking up never yanks the vehicles together. The spring force is
+applied as an impulse to one body and the opposite impulse to the other, at the coupling faces: a
+locomotive is genuinely held back by the wagons it pulls.
 
 ## Configuration
 
 `config/createtrainssable-server.toml`, applied immediately:
 
 ```toml
-[general]
-physicalTrains = true        # trains are Sable sub-levels, not contraptions
-physicalAtAssembly = true    # ...from the moment they are assembled, not only after a crash
-```
-
-```toml
 [trucks]
 speedPerRpm = 0.05           # m/s of target speed per RPM of the driving shaft
-tractionAcceleration = 1.2   # m/s^2 the driven wheels can put down
-brakeAcceleration = 1.6      # m/s^2 the brakes can remove
-guideStiffness = 18.0        # how firmly the axle is held on the rail
+maxSpeed = 60.0
+traction = 1.2               # m/s^2 the driven wheels can put down
+brake = 1.6                  # m/s^2 the brakes can remove
+friction = 0.45              # adhesion of steel wheel on steel rail
+guideStiffness = 18.0        # how hard the flange pushes back, 1/s^2
 guideDamping = 6.0
-maxGuideAcceleration = 26.0  # grip limit of the wheel/rail contact, m/s^2
-alignGain = 3.0              # how strongly the vehicle is turned along the rail
-maxLateralError = 1.2        # blocks off the rail before the truck gives up
+maxGuideAcceleration = 26.0  # grip limit of the contact, m/s^2
+alignGain = 3.0              # how strongly the body is turned along the rail
+maxLateralError = 1.2        # blocks off the rail before the flange gives up
 maxVerticalError = 0.9
-curveLateralLimit = 2.6      # m/s^2 of flange load a curve may take
-scanRadius = 24.0            # how far to look for track around a truck
-trackRecheckTicks = 2        # physics runs faster than track lookups
-couplingRange = 2.5          # blocks within which two spring couplings link
-couplingStiffness = 6.0
-couplingDamping = 4.0
-couplingMaxAcceleration = 14.0
-```
+curveLateralLimit = 2.6      # m/s^2 of lateral load a curve may take
+scanRadius = 24.0            # how far to look for track
+trackRecheckTicks = 2        # physics runs faster than track searches
+attachTicks = 40             # window after assembly to settle onto the rail
+attachRadius = 3.0
 
-`curveLateralLimit` is what sets the feel of the mod: raise it and trains hold absurd
-curves, lower it and a normal bend at speed throws the vehicle off.
+[couplings]
+range = 2.5                  # blocks within which two couplings link
+stiffness = 6.0
+damping = 4.0
+maxAcceleration = 14.0
+```
 
 ## Requirements
 
 - Minecraft 1.21.1, NeoForge 21.1.228 or newer
 - Create 6.0.10.x
-- Sable 2.0.x
-- Create: Aeronautics 1.3.x (the assembly tooling)
+- Sable 2.0.x (required: a truck is a block entity Sable ticks on a sub-level)
 - Java 21
 
 ## Known limitations
 
-- **Trains are held by a servo, not by axles.** Create's spline still says where a carriage
-  should be and a force controller takes the body there; the body can lose that argument -
-  that is a derailment - but it cannot yet steer itself along a switch that Create would not
-  have taken.
-- **Art is a first pass.** The models and textures are drawn for this mod from scratch and
-  are deliberately flat: a steel frame, a wheel, a red drive housing, a buffer plate and a
-  coil spring, in 16x16. They are meant to be replaced by a proper art pass.
-  `tools/make_textures.py` regenerates them if a colour or a shape needs changing.
-- **Trucks need an assembled sub-level.** They do nothing lying in the world, and this mod
-  does not ship an assembly tool - assemble with Create: Aeronautics.
-- **The rail contact is a servo, not a flange.** There is no wheel lift, no axle load
-  transfer and no per-axle slip curve; tight S-bends are where this shows first.
-- **Couplings are mass independent.** Both ends are pushed by the same acceleration rather
-  than by equal and opposite forces, so a locomotive is not slowed by a wagon it outweighs.
-- **One track lookup per truck every `trackRecheckTicks`.** Fine for a handful of vehicles,
-  measurable with dozens of trucks in one place.
+- **Assembly is Sable's job.** The mod does not ship an assembly tool: a vehicle is assembled into a
+  sub-level with Sable's own command (`/sable assemble connected`) or with whatever tooling the
+  installed Sable add-ons provide. A block that assembles the connected structure is the next
+  planned addition.
+- **Create trains are not converted.** A Create station train stays a Create contraption. The
+  physical vehicle is the one the player builds and assembles; converting station trains would mean
+  keeping two representations of the same train in sync, which is exactly what the previous
+  architecture got wrong.
+- **One contact point per axle.** There is no wheel lift, no axle load transfer and no per-wheel
+  slip curve; tight S-bends are where this shows first.
+- **Couplings do not transmit torque or bend.** They pull and push along one line, which is what a
+  screw coupling does, and nothing more.
+- **The art is a first pass.** The blocks are drawn in 16x16 by `tools/make_textures.py`; they are
+  readable and consistent, not final.
 - **Sable's API is not semver-stable.** A Sable update can require an update here.
-- **Early development.** The physics is unit-tested, but this build has not yet been
-  exercised in a long survival world.
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Create and Sable are separate projects with their own
-licenses and are not included in this mod.
+MIT. See [LICENSE](LICENSE). Create and Sable are separate projects under their own licenses and
+are not included in this mod.
 
 ## Credits
 
 - RyanHCode and the Sable contributors, for sub-levels and the Rapier pipeline.
-- The Create team, for the train graph, track and kinetic systems.
+- The Create team, for the track graph and the kinetic system.
 - Dimforge, for the Rapier physics engine.
 
-Minecraft is a trademark of Mojang Synergies AB. This mod is not affiliated with Mojang,
-Create, Sable or Create: Aeronautics.
+Minecraft is a trademark of Mojang Synergies AB. This mod is not affiliated with Mojang, Create or
+Sable.

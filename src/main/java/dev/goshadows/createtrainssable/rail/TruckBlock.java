@@ -16,14 +16,10 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 /**
  * A truck: the block that puts a Sable vehicle on Create's rails.
  *
- * <p>Build the vehicle, put trucks where the axles belong, give the driven ones rotation and assemble
- * the whole thing into a sub-level. There is no train object, no hidden contraption and nothing that
- * can be teleported, so the vehicle is exactly what was built and it leaves the rails when the
- * physics says it should.</p>
- *
- * <p>A driven truck takes rotary power on its axle axis; the speed of that rotation is the speed the
- * vehicle tries to reach. A rolling truck carries weight, coasts and brakes. A vehicle needs at least
- * one driven truck.</p>
+ * <p>Build the vehicle, put trucks where the axles belong, give the driven ones rotation and
+ * assemble the whole thing into a sub-level. There is no train object and nothing that can be
+ * teleported, so the vehicle is exactly what was built, and it leaves the rails when the physics
+ * says it should.</p>
  */
 public class TruckBlock extends HorizontalKineticBlock implements IBE<TruckBlockEntity> {
 
@@ -40,7 +36,7 @@ public class TruckBlock extends HorizontalKineticBlock implements IBE<TruckBlock
     }
 
     /** True for a truck that converts rotation into motion. */
-    public boolean isDriven() {
+    public boolean driven() {
         return driven;
     }
 

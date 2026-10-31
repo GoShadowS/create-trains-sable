@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.4.0 - a player can bridge a train, and a coupling pulls a wagon
+
+### What this version adds
+
+Two halves of phase B, both measured on a dedicated server.
+
+**The in-game entry point.** The debug assembly tool has a second action: sneak and right-click any
+part of an assembled vehicle. If the vehicle already carries a train, the train is unbridged; if not,
+the tool finds the nearest unbridged Create train within 64 blocks in the same dimension and pairs it
+with the clicked vehicle and the other free bodies near it, ordered the way the train faces. One body
+per carriage, and if the counts do not match it refuses and says both numbers. Every click reports its
+result in the action bar and the log, with a search summary (`trains=1, usable=1, nearest=2.0 blocks`)
+when it finds nothing, because "no train" has three different causes and the log has to say which.
+
+**Couplings between carriages.** `TrainCouplings` is the spring between two neighbouring bodies:
+`stiffness * deformation + damping * separation rate`, capped at `maxAcceleration` of the effective
+mass, applied to both bodies at their centres as one impulse and its opposite. Its arithmetic is pure
+and has seven unit tests. With it, one traction truck can move a train of unpowered wagons - the wagon
+has no motor, so everything it does arrives through the spring.
+
+**Several bodies per train.** `TrainBridge.bridge(train, bodies)` takes a list and requires exactly one
+body per carriage. The gaps the train was coupled at are recorded as rest lengths, so hooking up never
+yanks the bodies together.
+
+### Three things the harness found, and what they cost
+
+- **A carriage without a contraption cannot be handed back to Create.** `Carriage.manageEntities`
+  creates the carriage's `CarriageContraptionEntity` from its serialised data; with empty data
+  `createEntity` sets `Train.invalid` and Create removes the train from the railway manager on the next
+  tick. Unbinding therefore keeps the carriage object and only changes where its distance comes from:
+  the suppression of the contraption entity lasts as long as the carriage does. Measured: the train
+  survives unbridge and re-bind, and its carriage is still the same object with the same id.
+- **A bridged carriage could not be saved.** `MountedStorageManager is uninitialized` was thrown the
+  first time the carriage was written to NBT, because Create initialises the cargo storage while
+  setting up the contraption, which a bridged carriage never gets. `BridgedCarriage` now initialises
+  it. The storage is empty - cargo is disabled while bridged - but a train that cannot be saved is not
+  a train.
+- **A train built by the harness has to be bridged in the tick it is created.** Not a mod bug: the
+  harness builds carriages without contraption data, and Create kills such a train on its first tick.
+  The scenario does both actions in one tick and says why in a comment.
+
+### Measured, not claimed
+
+`./gradlew runSelfTest`, dedicated server, all 7 scenarios pass, 18 unit tests, 0 failed:
+
+```
+entry  PASS bridge=BRIDGED unbridge=UNBRIDGED rebridge=BRIDGED active_after_rebind=true
+           moved_bridged=4.390 moved_while_unbound=0.512 speed_after_unbind=0.039
+           train_moved_unbound=1.600 moved_after_rebind=1.569
+           nbt_class=Carriage nbt_spacing=2 nbt_ok=true
+couple PASS spacing=6.000 rest=10.000 gap_start=10.000 gap_end=10.240 extension=0.240
+           peak_extension=0.246 train_deformation=-0.240 v_front=0.834 v_rear=0.884
+           front_moved=10.132 rear_moved=9.892 trailer_driven=false derailed=false
+```
+
+Target, actual, deviation, in the same shape the other scenarios use:
+
+| Quantity | Target | Actual | Deviation |
+| --- | --- | --- | --- |
+| coupling gap (blocks) | 10.000 (rest, measured at coupling) | 10.240 | +0.240 (2.4 %) |
+| spring deformation (blocks) | 0 | +0.240, peak 0.246 | 0.240 |
+| the train's own deformation (blocks) | -0.240 (same number, opposite sign) | -0.240 | 0.000 |
+| wagon speed vs leader (m/s) | 0.834 | 0.884 | the wagon is ahead, and cannot pull |
+| body distance while bridged (blocks) | - | 4.390 | - |
+| body distance while unbound (blocks) | 0 (it is not driven) | 0.512, down to 0.039 m/s | - |
+| train distance while unbound (blocks) | 1.600 (20 ticks at 0.08/tick) | 1.600 | 0.000 |
+
+The sign convention is not a typo: Create counts a positive stress as "these carriages should move
+apart", the spring counts a positive extension as "they are too far apart", so the two agree when
+their sum is zero. The scenario asserts `|stress + extension| <= 0.5` and reports both.
+
+### Known limits of this phase
+
+- Pairing is by distance and direction, not by identity: a consist assembled in a different order gets
+  paired wrongly, and the springs will fight.
+- `Train.stress` is package-private in Create, so the harness recomputes the same formula from the
+  travelling points; the number in the train's status message is not asserted directly.
+- A bridged carriage still has no passengers and no cargo, and no station or signal behaviour: see
+  0.3.1 for why, unchanged by this version.
+
+
 ## 0.3.1 - phase A said what it did not do
 
 ### Why this version exists

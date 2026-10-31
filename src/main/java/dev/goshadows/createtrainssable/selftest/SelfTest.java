@@ -5,11 +5,14 @@ import com.simibubi.create.Create;
 import com.simibubi.create.content.trains.entity.Carriage;
 import com.simibubi.create.content.trains.entity.CarriageBogey;
 import com.simibubi.create.content.trains.entity.Train;
+import com.simibubi.create.content.trains.graph.DimensionPalette;
 import com.simibubi.create.content.trains.graph.TrackGraph;
 import dev.goshadows.createtrainssable.CreateTrainsSable;
+import dev.goshadows.createtrainssable.bridge.BridgeTool;
 import dev.goshadows.createtrainssable.bridge.BridgedCarriage;
 import dev.goshadows.createtrainssable.bridge.CarriageBody;
 import dev.goshadows.createtrainssable.bridge.TrainBridge;
+import dev.goshadows.createtrainssable.bridge.TrainCouplings;
 import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.rail.TruckBlockEntity;
 import dev.goshadows.createtrainssable.rail.Vec;
@@ -38,7 +41,9 @@ import java.util.UUID;
  *
  * <p>The scenarios are the contract of the mod, in order: the vehicle can be assembled and finds its
  * rail, it stays on the rail, the driven axle reaches the speed its shaft asks for, a vehicle pushed
- * off the rail keeps its momentum and falls, and a Create train follows the body it is bridged to.</p>
+ * off the rail keeps its momentum and falls, a Create train follows the body it is bridged to, the
+ * player's bridge action binds and unbinds without damaging the train, and a coupling pulls an
+ * unpowered wagon behind a powered one.</p>
  */
 public final class SelfTest {
 
@@ -75,7 +80,9 @@ public final class SelfTest {
                 new GuideScenario(),
                 new TractionScenario(),
                 new DerailScenario(),
-                new BridgeScenario());
+                new BridgeScenario(),
+                new EntryScenario(),
+                new CoupleScenario());
 
         private int index = -1;
         private int passed;
@@ -155,7 +162,7 @@ public final class SelfTest {
 
         final String name;
         private final int budget;
-        private final int z;
+        final int z;
 
         ServerLevel level;
         TestRig rig;
@@ -258,6 +265,26 @@ public final class SelfTest {
         Vec velocity() {
             return rig == null ? Vec.ZERO : rig.velocity();
         }
+    }
+
+    /**
+     * A one-carriage Create train on a rig's rail, registered in Create's railway manager.
+     *
+     * <p>The two bogeys sit on the two axles of the rig, so the carriage and the body start aligned
+     * and any later difference is the physics, not an offset. A standard bogey's wheel points are two
+     * blocks apart, and its first point is the front of the train, so the carriage faces east the way
+     * the rig's traction truck does.</p>
+     */
+    private static Train singleCarriageTrain(TestRig rig, double leadingAxle, double trailingAxle) {
+        CarriageBogey leading = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
+                rig.railPoint(leadingAxle + 1.0), rig.railPoint(leadingAxle - 1.0));
+        CarriageBogey trailing = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
+                rig.railPoint(trailingAxle - 1.0), rig.railPoint(trailingAxle + 1.0));
+        Carriage carriage = new Carriage(leading, trailing, 2);
+        Train train = new Train(UUID.randomUUID(), UUID.randomUUID(), rig.graph,
+                new ArrayList<>(List.of(carriage)), new ArrayList<>(), true, 0);
+        Create.RAILWAYS.addTrain(train);
+        return train;
     }
 
     /**
@@ -602,6 +629,7 @@ public final class SelfTest {
         private static final double TARGET_METRES_PER_SECOND = COMMAND * CarriageBody.TICKS_PER_SECOND;
 
         private Train train;
+        private TrainBridge.Bridge bridge;
         private BridgedCarriage bridged;
         private double startCentre;
         private double travelledBody;
@@ -639,17 +667,10 @@ public final class SelfTest {
          * way the rig's traction truck does.</p>
          */
         private void buildTrain() {
-            TrackGraph graph = rig.graph;
-            CarriageBogey leading = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
-                    rig.railPoint(LEADING_AXLE + 1.0), rig.railPoint(LEADING_AXLE - 1.0));
-            CarriageBogey trailing = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
-                    rig.railPoint(TRAILING_AXLE - 1.0), rig.railPoint(TRAILING_AXLE + 1.0));
-            Carriage carriage = new Carriage(leading, trailing, 2);
-            train = new Train(UUID.randomUUID(), UUID.randomUUID(), graph,
-                    new ArrayList<>(List.of(carriage)), new ArrayList<>(), true, 0);
+            train = singleCarriageTrain(rig, LEADING_AXLE, TRAILING_AXLE);
             train.targetSpeed = COMMAND;
-            Create.RAILWAYS.addTrain(train);
-            bridged = TrainBridge.bridge(train, rig.body);
+            bridge = TrainBridge.bridge(train, rig.body);
+            bridged = bridge.carriages().getFirst();
             startCentre = rig.centre().x();
         }
 
@@ -694,7 +715,7 @@ public final class SelfTest {
                 fail("the train is no longer in Create's railway manager");
                 return;
             }
-            if (TrainBridge.bridged(train) != bridged || train.carriages.size() != 1) {
+            if (TrainBridge.bridged(train) != bridge || train.carriages.size() != 1) {
                 fail("the train no longer carries the bridged carriage");
                 return;
             }
@@ -790,8 +811,452 @@ public final class SelfTest {
                 train.invalid = true;
                 train = null;
             }
+            bridge = null;
             bridged = null;
             super.cleanup();
+        }
+    }
+
+
+    /**
+     * The player's entry point: the debug tool bridges and unbinds a train, and the train survives it.
+     *
+     * <p>This scenario never calls {@code TrainBridge} directly. It calls {@link BridgeTool#toggle}
+     * with the position of a truck, which is the same call the assembly tool makes when a player
+     * sneaks and right-clicks - so what is measured here is the path a player takes.</p>
+     *
+     * <p>Unbinding is the interesting half. The carriage object is kept and merely deactivated, so
+     * the train's identity, its carriage ids and its serialised form do not change; the body stops
+     * being driven and coasts to a halt under its own brakes. Re-binding drives it again from where
+     * it stopped. The scenario also writes the carriage to NBT and reads it back, because that is
+     * the thing that would silently break a train after a save.</p>
+     */
+    private static final class EntryScenario extends Scenario {
+
+        /** Speed the train asks for, in blocks per tick: 0.08 * 20 = 1.6 m/s. */
+        private static final double COMMAND = 0.08;
+
+        private static final int BRIDGE_AT = 10;
+        private static final int UNBRIDGE_AT = 80;
+        private static final int REBRIDGE_AT = 100;
+        private static final int END = 170;
+
+        private Train train;
+        private BridgeTool.Outcome first;
+        private BridgeTool.Outcome second;
+        private BridgeTool.Outcome third;
+        private double start;
+        private double movedBefore;
+        private double movedAfterUnbind;
+        private double trainMovedWhileUnbound;
+        private double movedAfterRebind;
+        private double speedAfterUnbind;
+        private double travelAtUnbind;
+        private double rebindStart;
+        private String nbtClass = "?";
+        private int nbtSpacing = -1;
+        private boolean nbtOk;
+        private String nbtError = "";
+        private boolean activeAfterRebind;
+
+        EntryScenario() {
+            super("entry", END, 2464);
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            super.begin(level);
+            if (rig == null) {
+                finished = true;
+            }
+        }
+
+        @Override
+        void step() {
+            if (rig == null) {
+                return;
+            }
+            if (ticks == 1) {
+                // The train has to exist and be bridged in the same tick: a travel-less carriage
+                // has no contraption data for Create to spawn, which is exactly the limitation this
+                // harness works around and a real train never has.
+                train = singleCarriageTrain(rig, 2001.5, 2003.5);
+                train.targetSpeed = COMMAND;
+                CreateTrainsSable.LOGGER.info("CTS DEBUG scenario=entry built train {} trains={}",
+                        train.id, Create.RAILWAYS.trains.size());
+                first = BridgeTool.toggle(level, rig.clickedPos(), null);
+                start = rig.centre().x();
+                if (first.status() != BridgeTool.Status.BRIDGED) {
+                    fail("the tool did not bridge: " + first.status() + " " + first.detail());
+                    return;
+                }
+            }
+            if (first == null || first.status() != BridgeTool.Status.BRIDGED) {
+                return;
+            }
+            train.manualTick = true;
+            train.targetSpeed = COMMAND;
+            train.approachTargetSpeed(1.0f);
+
+            if (ticks == UNBRIDGE_AT) {
+                movedBefore = rig.centre().x() - start;
+                second = BridgeTool.toggle(level, rig.clickedPos(), null);
+                if (train.carriages.getFirst() instanceof BridgedCarriage carriage) {
+                    travelAtUnbind = carriage.travelToDate();
+                }
+            }
+            if (ticks == REBRIDGE_AT) {
+                movedAfterUnbind = rig.centre().x() - start;
+                if (train.carriages.getFirst() instanceof BridgedCarriage carriage) {
+                    trainMovedWhileUnbound = carriage.travelToDate() - travelAtUnbind;
+                }
+                speedAfterUnbind = rig.velocity().x();
+                third = BridgeTool.toggle(level, rig.clickedPos(), null);
+                rebindStart = rig.centre().x();
+                activeAfterRebind = TrainBridge.isBridged(train)
+                        && train.carriages.getFirst() instanceof BridgedCarriage bridged
+                        && bridged.isActive();
+            }
+            if (ticks > REBRIDGE_AT) {
+                movedAfterRebind = rig.centre().x() - rebindStart;
+            }
+            if (ticks % 20 == 0) {
+                log("x=" + f(rig.centre().x() - start)
+                        + " speed=" + f(rig.velocity().x())
+                        + " bridged=" + TrainBridge.isBridged(train)
+                        + " carriage=" + train.carriages.getFirst().getClass().getSimpleName()
+                        + " " + states());
+            }
+        }
+
+        @Override
+        void finish() {
+            if (rig == null || train == null) {
+                fail("no train");
+                return;
+            }
+            if (first == null || first.status() != BridgeTool.Status.BRIDGED) {
+                fail("the tool never bridged the train");
+                return;
+            }
+            if (second == null || second.status() != BridgeTool.Status.UNBRIDGED) {
+                fail("the tool did not unbind: " + (second == null ? "never called" : second.status()));
+                return;
+            }
+            if (third == null || third.status() != BridgeTool.Status.BRIDGED) {
+                fail("the tool did not bridge again: " + (third == null ? "never called" : third.status()));
+                return;
+            }
+            if (!activeAfterRebind) {
+                fail("the train is not carrying an active bridged carriage after re-binding");
+                return;
+            }
+            readBack();
+            if (!nbtOk) {
+                fail("the carriage did not survive a write and read: " + nbtError);
+                return;
+            }
+            if (movedBefore < 2.0) {
+                fail("the body barely moved while bridged: " + f(movedBefore));
+                return;
+            }
+            if (speedAfterUnbind > 0.3) {
+                fail("the body was still driven after unbinding: " + f(speedAfterUnbind) + " m/s");
+                return;
+            }
+            if (trainMovedWhileUnbound < 0.5) {
+                fail("the train stopped moving when it was unbound: " + f(trainMovedWhileUnbound));
+                return;
+            }
+            if (movedAfterRebind < 1.0) {
+                fail("the body did not move again after re-binding: " + f(movedAfterRebind));
+                return;
+            }
+            pass();
+        }
+
+        /** Writes the bridged carriage to NBT and reads it back, as a save would. */
+        private void readBack() {
+            try {
+                Carriage carriage = train.carriages.getFirst();
+                CompoundTag tag = carriage.write(new DimensionPalette(), level.registryAccess());
+                Carriage back = Carriage.read(tag, level.registryAccess(), rig.graph,
+                        new DimensionPalette());
+                nbtClass = back.getClass().getSimpleName();
+                nbtSpacing = back.bogeySpacing;
+                nbtOk = nbtSpacing == carriage.bogeySpacing;
+            } catch (RuntimeException e) {
+                nbtError = e.toString();
+                nbtOk = false;
+            }
+        }
+
+        @Override
+        String metrics() {
+            return "bridge=" + status(first)
+                    + " unbridge=" + status(second)
+                    + " rebridge=" + status(third)
+                    + " active_after_rebind=" + activeAfterRebind
+                    + " moved_bridged=" + f(movedBefore)
+                    + " moved_while_unbound=" + f(movedAfterUnbind - movedBefore)
+                    + " speed_after_unbind=" + f(speedAfterUnbind)
+                    + " train_moved_unbound=" + f(trainMovedWhileUnbound)
+                    + " moved_after_rebind=" + f(movedAfterRebind)
+                    + " nbt_class=" + nbtClass
+                    + " nbt_spacing=" + nbtSpacing
+                    + " nbt_ok=" + nbtOk
+                    + (nbtOk ? "" : " nbt_error=" + nbtError)
+                    + " ticks=" + ticks;
+        }
+
+        private static String status(BridgeTool.Outcome outcome) {
+            return outcome == null ? "-" : outcome.status().name();
+        }
+
+        @Override
+        void cleanup() {
+            if (train != null) {
+                TrainBridge.detach(train);
+                Create.RAILWAYS.removeTrain(train.id);
+                train.invalid = true;
+                train = null;
+            }
+            super.cleanup();
+        }
+    }
+
+    /**
+     * Two bodies, one train: the powered one has to pull the unpowered one through the coupling.
+     *
+     * <p>The rear vehicle is assembled with two idling trucks and nothing else, so it cannot pull
+     * itself at all. Whatever speed it ends up with came through the spring, and that is the point of
+     * the scenario: a train of physical bodies is held together by force, not by a shared speed.</p>
+     *
+     * <p>Three numbers are reported against a target, the way the bridge scenario does it: the gap
+     * the train was given, the gap the bodies actually have, and the deformation between them -
+     * both the spring's own measure and Create's {@code Train.stress}, which is computed from the
+     * carriages' track anchors and should agree with it in sign and size.</p>
+     */
+    private static final class CoupleScenario extends Scenario {
+
+        private static final double COMMAND = 0.08;
+        private static final int TRAILER_X = 2000;
+        private static final int LEADER_X = 2010;
+        private static final int RAIL_FROM = 1960;
+        private static final int RAIL_TO = 2120;
+
+        private TestRig trailer;
+        private TestRig.Rail rail;
+        private Train train;
+        private TrainBridge.Bridge bridge;
+
+        private double rest;
+        private double spacing;
+        private double gapStart;
+        private double gapEnd;
+        private double extension;
+        private double peakExtension;
+        private double stressCreate;
+        private double frontSpeed;
+        private double rearSpeed;
+        private double frontMoved;
+        private double rearMoved;
+        private double startFront;
+        private double startRear;
+        private boolean trailerDriven;
+
+        CoupleScenario() {
+            super("couple", 260, 2552);
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            this.level = level;
+            try {
+                rail = TestRig.rail(level, RAIL_FROM, RAIL_TO, 100, z + 1.5);
+                trailer = TestRig.assembleOn(rail, TRAILER_X, z, false, false);
+                rig = TestRig.assembleOn(rail, LEADER_X, z, true, false);
+                buildTrain();
+            } catch (RuntimeException | LinkageError e) {
+                CreateTrainsSable.LOGGER.error("CTS SELFTEST scenario=couple could not build", e);
+                fail("build: " + e);
+                finished = true;
+            }
+        }
+
+        /** A two-carriage train: the powered vehicle leads, the idling one trails behind it. */
+        private void buildTrain() {
+            double[] frontAxles = {LEADER_X + 1.5, LEADER_X + 3.5};
+            double[] rearAxles = {TRAILER_X + 1.5, TRAILER_X + 3.5};
+            CarriageBogey leading = bogeyAt(rig, frontAxles[1]);
+            CarriageBogey leadingRear = bogeyAt(rig, frontAxles[0]);
+            CarriageBogey trailerFront = bogeyAt(trailer, rearAxles[1]);
+            CarriageBogey trailerRear = bogeyAt(trailer, rearAxles[0]);
+
+            Carriage front = new Carriage(leading, leadingRear, 2);
+            Carriage back = new Carriage(trailerFront, trailerRear, 2);
+            double anchorGap = front.getTrailingPoint().getPosition(rig.graph)
+                    .distanceTo(back.getLeadingPoint().getPosition(rig.graph));
+            spacing = Math.round(anchorGap);
+
+            train = new Train(UUID.randomUUID(), UUID.randomUUID(), rig.graph,
+                    new ArrayList<>(List.of(front, back)),
+                    new ArrayList<>(List.of((int) spacing)), true, 0);
+            train.targetSpeed = COMMAND;
+            Create.RAILWAYS.addTrain(train);
+
+            trailerDriven = trailer.trucks.stream().anyMatch(TruckBlockEntity::isDriven);
+            bridge = TrainBridge.bridge(train, List.of(rig.body, trailer.body));
+            startFront = rig.centre().x();
+            startRear = trailer.centre().x();
+            gapStart = Math.abs(startFront - startRear);
+            rest = bridge.restLengths()[0];
+        }
+
+        private static CarriageBogey bogeyAt(TestRig rig, double axleX) {
+            return new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
+                    rig.railPoint(axleX + 1.0), rig.railPoint(axleX - 1.0));
+        }
+
+        @Override
+        void step() {
+            if (rig == null || trailer == null || train == null) {
+                return;
+            }
+            train.manualTick = true;
+            train.targetSpeed = COMMAND;
+            train.approachTargetSpeed(1.0f);
+
+            List<TrainCouplings.Report> reports = bridge.reports();
+            if (!reports.isEmpty()) {
+                extension = reports.getFirst().extension();
+                peakExtension = Math.max(peakExtension, Math.abs(extension));
+            }
+            if (ticks % 20 == 0) {
+                log("front=" + f(rig.centre().x() - startFront)
+                        + " rear=" + f(trailer.centre().x() - startRear)
+                        + " gap=" + f(gap())
+                        + " extension=" + f(extension)
+                        + " train_deformation=" + f(trainDeformation())
+                        + " v_front=" + f(rig.velocity().x())
+                        + " v_rear=" + f(trailer.velocity().x())
+                        + " " + states());
+            }
+        }
+
+        private double gap() {
+            return TrainBridge.centre(rig.body).sub(TrainBridge.centre(trailer.body)).length();
+        }
+
+        /**
+         * The deformation the train itself computes for this pair.
+         *
+         * <p>{@code Train.stress} is not public, so this applies the same formula Create uses - the
+         * spacing the train was built with minus the distance between the two carriages' facing
+         * points - to the travelling points, which are public. Positive means the carriages are
+         * closer together than they should be, the opposite sign to the spring's extension.</p>
+         */
+        private double trainDeformation() {
+            if (train == null || train.carriages.size() < 2 || rig == null) {
+                return 0.0;
+            }
+            Carriage front = train.carriages.get(0);
+            Carriage back = train.carriages.get(1);
+            double actual = back.getLeadingPoint().getPosition(rig.graph)
+                    .distanceTo(front.getTrailingPoint().getPosition(rig.graph));
+            return spacing - actual;
+        }
+
+        @Override
+        void finish() {
+            if (rig == null || trailer == null || train == null) {
+                fail("no train");
+                return;
+            }
+            gapEnd = gap();
+            frontSpeed = rig.velocity().x();
+            rearSpeed = trailer.velocity().x();
+            frontMoved = rig.centre().x() - startFront;
+            rearMoved = trailer.centre().x() - startRear;
+            stressCreate = trainDeformation();
+
+            if (trailerDriven) {
+                fail("the trailing vehicle has a traction truck; it could pull itself");
+                return;
+            }
+            if (rig.isRemoved() || trailer.isRemoved()) {
+                fail("a body was removed");
+                return;
+            }
+            if (train.derailed) {
+                fail("Create derailed the train: the coupling deformed past its limit");
+                return;
+            }
+            if (frontMoved < 2.0) {
+                fail("the leading body barely moved: " + f(frontMoved));
+                return;
+            }
+            if (rearMoved < 0.75 * frontMoved) {
+                fail("the coupling did not pull the unpowered vehicle: front=" + f(frontMoved)
+                        + " rear=" + f(rearMoved));
+                return;
+            }
+            if (rearSpeed < 0.75 * Math.abs(frontSpeed)) {
+                fail("the unpowered vehicle lags: front=" + f(frontSpeed) + " rear=" + f(rearSpeed));
+                return;
+            }
+            if (Math.abs(extension) > 1.0) {
+                fail("the coupling deformed more than a block: " + f(extension));
+                return;
+            }
+            // Create counts a positive stress as "these two should move apart"; the spring counts a
+            // positive extension as "they are too far apart". Same quantity, opposite sign.
+            if (Math.abs(stressCreate + extension) > 0.5) {
+                fail("the train's deformation and the spring disagree: train=" + f(stressCreate)
+                        + " spring=" + f(extension));
+                return;
+            }
+            pass();
+        }
+
+        @Override
+        String metrics() {
+            return "spacing=" + f(spacing)
+                    + " rest=" + f(rest)
+                    + " gap_start=" + f(gapStart)
+                    + " gap_end=" + f(gapEnd)
+                    + " extension=" + f(extension)
+                    + " peak_extension=" + f(peakExtension)
+                    + " train_deformation=" + f(stressCreate)
+                    + " v_front=" + f(frontSpeed)
+                    + " v_rear=" + f(rearSpeed)
+                    + " front_moved=" + f(frontMoved)
+                    + " rear_moved=" + f(rearMoved)
+                    + " trailer_driven=" + trailerDriven
+                    + " derailed=" + (train != null && train.derailed)
+                    + " ticks=" + ticks;
+        }
+
+        @Override
+        void cleanup() {
+            if (train != null) {
+                TrainBridge.detach(train);
+                Create.RAILWAYS.removeTrain(train.id);
+                train.invalid = true;
+                train = null;
+            }
+            if (rig != null) {
+                rig.remove();
+                rig = null;
+            }
+            if (trailer != null) {
+                trailer.remove();
+                trailer = null;
+            }
+            if (rail != null) {
+                rail.remove();
+                rail = null;
+            }
         }
     }
 

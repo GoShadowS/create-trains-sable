@@ -1,6 +1,7 @@
 package dev.goshadows.createtrainssable;
 
 import com.mojang.logging.LogUtils;
+import dev.goshadows.createtrainssable.bridge.TrainBridge;
 import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.rail.CTSBlockEntities;
 import dev.goshadows.createtrainssable.rail.CTSBlocks;
@@ -34,6 +35,9 @@ public final class CreateTrainsSable {
         CTSItems.register(modBus);
         CTSCreativeTab.register(modBus);
         modContainer.registerConfig(ModConfig.Type.SERVER, CTSConfig.SPEC, MOD_ID + "-server.toml");
+        // The springs between the carriages of a bridged train are the only part of the bridge that
+        // has to run on a timer: everything else happens inside Create's own train tick.
+        NeoForge.EVENT_BUS.addListener(TrainBridge::onServerTick);
         if (Boolean.getBoolean(SelfTest.ENABLED_PROPERTY)) {
             // Only the physics harness asks for this; a normal game never registers the listeners.
             NeoForge.EVENT_BUS.addListener(SelfTest::onServerStarted);

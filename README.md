@@ -74,10 +74,15 @@ points, the signals, the stations, the schedule and the train screen - and no ph
 
 - **Create keeps the route.** The train stays a real `Train` in Create's railway manager. Nothing
   about `Train`, `Carriage`, `TrackGraph` or the train screen is patched or replaced.
-- **The physics keeps the body.** With `TrainBridge.bridge(train, body)` the single carriage of the
-  train becomes a `BridgedCarriage`. Instead of travelling the distance `Train.speed` implies, it
-  travels the distance its body actually covered since the last tick, measured along the carriage's
-  own forward direction and clamped at two blocks per tick so a teleport cannot drag a carriage.
+- **The physics keeps the body.** With `TrainBridge.bridge(train, bodies)` each carriage of the train
+  becomes a `BridgedCarriage` tied to one body. Instead of travelling the distance `Train.speed`
+  implies, it travels the distance its body actually covered since the last tick, measured along the
+  carriage's own forward direction and clamped at two blocks per tick so a teleport cannot drag a
+  carriage.
+- **The couplings hold the train together.** Between two neighbouring bodies a spring and a damper
+  push and pull along the line between their centres, with equal and opposite impulses. That is what
+  lets one traction truck move a train of unpowered wagons: the wagon has no motor, so all of its
+  motion arrives through the coupling.
 - **The order still flows the other way.** `Train.speed` - set by the controls, by a schedule or by
   `Navigation` - is handed to the axles as a target speed, and the wheels turn it into force. The
   train tells the body how fast to go; it never tells it where it is.
@@ -126,9 +131,31 @@ the station and signal criteria are open and are listed as open rather than pres
 next phase that touches the train loop is where they get closed, with scenarios `station` and
 `signal`, and with a conductor path that does not depend on a contraption entity.
 
-Today the bridge has no in-game entry point: a train is bridged by code (`TrainBridge.bridge`) or by
-the harness. That entry point is the first item of phase B, because a player has to be able to bridge
-a train by hand before multi-carriage work can be judged in the world at all.
+### Bridging a train by hand
+
+The bridge is a debug action on the debug assembly tool, and it needs no command:
+
+1. Build a vehicle, put trucks under the frame, and right-click it with the **assembly tool** to make
+   it a body. Do the same for every vehicle of the consist.
+2. Build or place a Create train with as many carriages as there are bodies. The train may be standing
+   still; it does not have to be near the bodies at the moment they are assembled.
+3. **Sneak and right-click any part of an assembled vehicle with the assembly tool.** The tool looks
+   for the nearest unbridged train within 64 blocks whose route is in the same dimension, and pairs it
+   with the vehicle that was clicked plus the other free bodies near it, ordered the way the train
+   faces. One body per carriage; if the counts do not match it refuses and tells you both numbers.
+4. **Sneak and right-click again to unbridge.** The bodies stay where they are, stop being driven and
+   brake to a halt; the train keeps its route and moves on its own.
+
+Every click prints its result in the action bar and in the log (`Bridge tool: BRIDGED (...)`, with a
+search summary such as `trains=1, usable=1, nearest=2.0 blocks` when it finds nothing). The action is
+deliberately crude: it picks the nearest train rather than asking which one you meant, because it is a
+developer tool for reaching the physics quickly, not the mod's main feature.
+
+What "unbridge" honestly means: the carriage stops using its body's measured distance, so the train
+travels along its track at its own commanded speed while the bodies are left behind. A bridged
+carriage cannot go back to Create's contraption - its blocks live in a Sable body, and Create's
+`createEntity` would mark the train invalid from the empty contraption data. That is why the debug
+toggle keeps the carriage object and only switches where its distance comes from.
 
 ## What comes next
 
@@ -185,9 +212,11 @@ maxAcceleration = 14.0
 
 Three things run on every push, in this order, and each has to pass:
 
-1. **`./gradlew build`** - the mod compiles, and the rail-contact arithmetic passes 11 unit tests
+1. **`./gradlew build`** - the mod compiles, and the rail-contact and coupling arithmetic passes 18
+   unit tests
    (holding the rail, leaving it past the flange, the attach window, overspeed on a curve, the
-   adhesion cap, weight and grip sharing between axles, the steering correction).
+   adhesion cap, weight and grip sharing between axles, the steering correction; and for the
+   couplings: rest length, stretch, compression, damping, closing, the cap and coincident bodies).
 2. **`./gradlew runSelfTest`** - the physics session described below. A dedicated server builds a
    vehicle by code, lets the engine drive it, and prints what happened.
 3. **`./gradlew runServer`** - a dedicated server loads the mod and reaches `Done (`.
@@ -206,10 +235,12 @@ then measures it over several hundred ticks:
 | `traction` | 32 RPM really moves the vehicle at 1.6 m/s | speed, distance travelled, states |
 | `derail` | a 14 m/s sideways push leaves the rail, keeps momentum and falls | speed after the push, height lost, whether the flange ever gave up |
 | `bridge` | a real Create train with one carriage follows the body it is bridged to | commanded and measured speed, distance travelled by the body and by the carriage, drift, lateral error, anchor gap, ramp |
+| `entry` | the debug tool bridges, unbinds and re-binds a train, and the train survives it | the three statuses, distance moved in each state, speed after unbinding, the train's own travel while unbound, and a carriage NBT round trip |
+| `couple` | an unpowered vehicle is pulled by a powered one through the coupling | spacing, rest and actual gap, deformation both from the spring and from the train, both speeds, both distances |
 
 Each scenario prints one line of numbers and the run ends with
 `CTS SELFTEST SUMMARY scenarios=5 passed=5 failed=0`; the CI job fails unless that line says
-`failed=0`. The last run on `main` (the `bridge` line is wrapped for width):
+`failed=0`. The last run on `main` (long lines are wrapped for width):
 
 ```
 assembly PASS blocks=17 trucks=2 mass=17.000 states=[GUIDING,GUIDING]
@@ -220,7 +251,33 @@ bridge   PASS carriages=1 target=1.600 speed=1.424 travelled_body=14.234
               travelled_train=14.234 drift=0.000 lateral_max=0.000
               anchor_gap=0.011 ordered=1.600 peak=1.424 rise_ticks=34
               in_railway_manager=true
+entry    PASS bridge=BRIDGED unbridge=UNBRIDGED rebridge=BRIDGED
+              active_after_rebind=true moved_bridged=4.390
+              moved_while_unbound=0.512 speed_after_unbind=0.039
+              train_moved_unbound=1.600 moved_after_rebind=1.569
+              nbt_class=Carriage nbt_spacing=2 nbt_ok=true
+couple   PASS spacing=6.000 rest=10.000 gap_start=10.000 gap_end=10.240
+              extension=0.240 peak_extension=0.246 train_deformation=-0.240
+              v_front=0.834 v_rear=0.884 front_moved=10.132 rear_moved=9.892
+              trailer_driven=false derailed=false
 ```
+
+The `entry` scenario calls the same function the tool calls, with the position of a truck - the path a
+player takes, not a shortcut into `TrainBridge`. Bridging moves the body 4.390 blocks (the body is
+driven); unbinding leaves the body to coast, so it covers only 0.512 more and is down to 0.039 m/s
+twenty ticks later, while the train itself travels 1.600 blocks on its own (20 ticks at 0.08 blocks per
+tick, exactly the commanded speed). Re-binding drives it again: 1.569 blocks. The carriage is written
+to NBT and read back at the end and comes back as a plain `Carriage` with its spacing intact, which is
+the thing that would silently break a train after a save.
+
+The `couple` scenario assembles a second vehicle with two **idling** trucks behind the powered one, so
+it cannot pull itself: `trailer_driven=false`. The train's spacing is 6.000 blocks between the facing
+carriage points, while the bodies start 10.000 blocks apart; over 260 ticks the gap settles at 10.240,
+so the spring's deformation is 0.240 blocks (peaking at 0.246), and the train's own deformation formula
+applied to the travelling points gives -0.240 - the same number with the opposite sign, which is the
+documented convention, not a coincidence (`|stress + extension| = 0.000`). Both bodies move: the leader
+10.132 blocks, the wagon 9.892, at 0.834 and 0.884 m/s. The leader is slower than in the `bridge`
+scenario because it is pulling a second body; the wagon has no motor and still keeps up.
 
 The bridge scenario builds a real `Train` with a real `Carriage` on the same track graph, registers
 it in Create's railway manager and bridges it to the rig. It then lets Create's own train loop drive:
@@ -256,13 +313,18 @@ measurement from play.
 - **Assembly takes the whole connected structure.** The assembly tool gathers everything touching
   the block that was clicked, so a vehicle that is connected to the ground or to a building will
   take that with it. Disconnect it first, or click a part that is not touching the world.
-- **A train's own contraption is not turned into a body yet.** The bridge binds a train to a body
-  that already exists, and the harness supplies one it builds. Reading a carriage's contraption,
-  putting its blocks into the world and assembling them is the next step; until then a train and a
-  body are joined only by code.
-- **One carriage per body.** `TrainBridge.bridge` refuses a train with more than one carriage: the
-  couplings between bodies have to decide who pulls whom, and the spring coupling model is not wired
-  into the train loop yet. A multi-carriage train stays a Create contraption.
+- **A train's own contraption is not turned into a body yet.** The bridge binds a train to bodies
+  that already exist: the player assembles each vehicle by hand and then bridges the train to them.
+  Reading a carriage's contraption, putting its blocks into the world and assembling them is still
+  not implemented.
+- **A bridge needs as many free bodies as the train has carriages.** The tool pairs them by distance
+  and direction, not by identity, so a consist assembled in a different order will be paired wrongly
+  and the springs will fight. There is no per-carriage selection yet.
+- **`Train.stress` is not public.** The harness recomputes Create's deformation formula from the
+  travelling points to compare it against the spring; the number in the train's own status message
+  comes from Create's private field and is not asserted directly.
+- **A pair that deforms by more than four blocks derails the train, by Create's own rule.** The spring
+  is capped at 14 m/s^2 so this is hard to reach, but a body wedged against a wall will do it.
 - **No passengers, no cargo while bridged.** A bridged carriage has no contraption entity, so there
   is nothing to ride in and nothing to open. See "What a bridged carriage does not have" above.
 - **No station stops and no signal stops while bridged.** Create's navigation needs a conductor from

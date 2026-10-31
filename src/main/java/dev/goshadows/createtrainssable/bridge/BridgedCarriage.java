@@ -20,16 +20,18 @@ import net.minecraft.world.phys.Vec3;
  * engine needs to own is the <em>distance</em>, and a subclass can supply it without touching a
  * single line of Create.</p>
  *
- * <p>A bridged carriage never spawns a {@code CarriageContraptionEntity}: the body in the world is
- * the carriage, and a contraption entity drawn on top of it would be a second copy of the same
- * vehicle.</p>
+ * <p>A carriage can be deactivated. A deactivated carriage is still the same object with the same
+ * id, so the train's serialisation and network identity do not change; it simply goes back to
+ * Create's own integration and spawns its contraption entity again. That is what "unbridge" does,
+ * and it is why unbinding does not have to rebuild the train.</p>
  */
 public final class BridgedCarriage extends Carriage {
 
     /** Below this squared length a direction is noise, in the same units as {@link Vec}. */
     private static final double MIN_DIRECTION = 0.25;
 
-    private final CarriageBody body;
+    private CarriageBody body;
+    private boolean active;
     private double travelToDate;
     private double lastMoved;
 
@@ -37,10 +39,39 @@ public final class BridgedCarriage extends Carriage {
         super(original.bogeys.getFirst(), original.bogeys.getSecond(), original.bogeySpacing);
         this.id = original.id;
         this.body = body;
+        this.active = body != null;
+        // Create initialises a carriage's cargo storage when it sets up the contraption. A bridged
+        // carriage never gets that call, and an uninitialised manager throws the moment the train is
+        // written to NBT - the harness caught it as "MountedStorageManager is uninitialized" on the
+        // first save-shaped round trip. The storage is empty here because cargo is disabled while a
+        // carriage is bridged, but it has to exist.
+        this.storage.initialize();
     }
 
+    /** The body this carriage follows, or {@code null} while it is deactivated. */
     public CarriageBody body() {
         return body;
+    }
+
+    public boolean isActive() {
+        return active && body != null && !body.body().isRemoved();
+    }
+
+    /** Points this carriage at a body again, without replacing it in the train. */
+    public void activate(CarriageBody body) {
+        this.body = body;
+        this.active = body != null;
+        if (body != null) {
+            body.forget();
+        }
+    }
+
+    /** Returns this carriage to Create's own movement. The body is left alone. */
+    public void deactivate() {
+        if (body != null) {
+            body.clearDrive();
+        }
+        this.active = false;
     }
 
     /** Distance this carriage has travelled since it was bridged, in blocks. */
@@ -55,15 +86,15 @@ public final class BridgedCarriage extends Carriage {
 
     /** Speed the body actually has along the carriage's forward direction, in m/s. */
     public double measuredSpeed() {
-        return body.measuredSpeed(train == null ? null : forward(train.graph));
+        return isActive() ? body.measuredSpeed(train == null ? null : forward(train.graph)) : 0.0;
     }
 
     @Override
     public double travel(Level level, TrackGraph graph, double distance, TravellingPoint toFollowForward,
                          TravellingPoint toFollowBackward, int type) {
 
-        if (graph == null || body.body().isRemoved()) {
-            // Nothing to measure: fall back to Create's own integration rather than stand still.
+        if (graph == null || !isActive()) {
+            // Nothing to measure: Create's own integration, exactly as an unbridged carriage.
             lastMoved = super.travel(level, graph, distance, toFollowForward, toFollowBackward, type);
             travelToDate += lastMoved;
             return lastMoved;
@@ -81,14 +112,19 @@ public final class BridgedCarriage extends Carriage {
     }
 
     /**
-     * The body is the carriage, so Create must not create a contraption entity for it.
+     * A bridged carriage never lets Create create a contraption entity for it.
      *
-     * <p>Anchors are still updated inside {@code travel}; only the entity side is skipped. Passengers
-     * and cargo stay where they are until the body carries them itself.</p>
+     * <p>Anchors are still updated inside {@code travel}; only the entity side is skipped. This is
+     * not conditional on being active, and the reason is a failure the harness caught: the moment
+     * Create is allowed to run its normal path it finds no serialised contraption in a carriage that
+     * was built by the bridge, cannot create the entity, sets {@code Train.invalid} and the train is
+     * removed from the railway manager on the next tick. A carriage whose blocks live in a Sable body
+     * has nothing to hand back to Create, so the suppression has to last as long as the carriage
+     * does - including after it is unbridged.</p>
      */
     @Override
     public void manageEntities(Level level) {
-        // Intentionally empty: see the class comment.
+        // Intentionally empty: see the method comment.
     }
 
     /**

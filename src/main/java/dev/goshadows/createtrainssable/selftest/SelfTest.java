@@ -227,6 +227,23 @@ public final class SelfTest {
         String f(double value) {
             return String.format(Locale.ROOT, "%.3f", value);
         }
+
+        /** One telemetry line; the CI report quotes every {@code CTS} line of the log. */
+        void log(String values) {
+            CreateTrainsSable.LOGGER.info("CTS DEBUG scenario={} t={} {}", name, ticks, values);
+        }
+
+        /** Axle zero, or the origin when there is no body. */
+        Vec axle() {
+            if (rig == null || rig.trucks.isEmpty()) {
+                return Vec.ZERO;
+            }
+            return rig.axles().get(0);
+        }
+
+        Vec velocity() {
+            return rig == null ? Vec.ZERO : rig.velocity();
+        }
     }
 
     /**
@@ -315,6 +332,13 @@ public final class SelfTest {
                 rig.push(new Vec(0, 0, 0.5 * rig.mass()));
             }
             worstLateral = Math.max(worstLateral, rig.lateralError());
+            if (ticks % 10 == 0) {
+                log("lateral=" + f(rig.lateralError())
+                        + " vz=" + f(rig.velocity().z())
+                        + " vx=" + f(rig.velocity().x())
+                        + " y=" + f(axle().y())
+                        + " " + states());
+            }
             if (ticks >= 200) {
                 finalLateral = rig.lateralError();
                 finalVertical = rig.verticalOffset();
@@ -391,6 +415,13 @@ public final class SelfTest {
                 start = rig.axles().get(0);
                 rig.drive(RPM);
             }
+            if (ticks % 20 == 0 && ticks >= 20) {
+                log("x=" + f(axle().x())
+                        + " vx=" + f(rig.velocity().x())
+                        + " vz=" + f(rig.velocity().z())
+                        + " lateral=" + f(rig.lateralError())
+                        + " " + states());
+            }
             if (ticks >= 220 && start != null) {
                 speed = rig.velocity().x();
                 travelled = rig.axles().get(0).x() - start.x();
@@ -455,6 +486,12 @@ public final class SelfTest {
             if (ticks == 20) {
                 rig.push(new Vec(0, 0, PUSH * rig.mass()));
                 pushed = true;
+            }
+            if (ticks % 10 == 0 && ticks >= 20) {
+                log("lateral=" + f(rig.lateralError())
+                        + " vz=" + f(rig.velocity().z())
+                        + " y=" + f(axle().y())
+                        + " " + states());
             }
             if (pushed && ticks >= 90) {
                 Vec velocity = rig.velocity();

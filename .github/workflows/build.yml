@@ -167,7 +167,7 @@ jobs:
           set -e
           echo "gradle status=$status"
           echo "--- self-test lines ---"
-          grep -E "CTS SELFTEST|physics self-test armed" /tmp/selftest.log || true
+          grep -E "CTS " /tmp/selftest.log || true
           summary=$(grep -E "CTS SELFTEST SUMMARY" /tmp/selftest.log | tail -1 || true)
           {
             printf '### physics self-test, commit `%s`\n\n' "${GITHUB_SHA:0:8}"
@@ -177,7 +177,7 @@ jobs:
               printf 'the harness never printed a summary (gradle status %s).\n\n' "$status"
             fi
             printf '```\n'
-            grep -E "CTS SELFTEST" /tmp/selftest.log || tail -80 /tmp/selftest.log
+            grep -E "CTS " /tmp/selftest.log || tail -80 /tmp/selftest.log
             printf '```\n'
           } > /tmp/report.md
           gh api -X POST "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \

@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,7 +22,25 @@ jobs:
           java-version: "21"
       - uses: gradle/actions/setup-gradle@v4
       - name: Compile and test
-        run: ./gradlew build --stacktrace --no-daemon
+        id: gradle
+        run: |
+          set +e
+          ./gradlew build --no-daemon --console=plain > /tmp/gradle.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          tail -80 /tmp/gradle.log
+          if [ "$status" -ne 0 ]; then
+            {
+              printf '### `./gradlew build` failed (%s)\n\n```\n' "$GITHUB_SHA"
+              grep -E "error:|error |FAILURE|What went wrong|^> |warning: \[" /tmp/gradle.log | head -60
+              printf '```\n'
+            } > /tmp/report.md
+            gh api -X POST "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \
+              -f body="$(cat /tmp/report.md)" > /dev/null
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4

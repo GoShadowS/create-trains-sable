@@ -89,14 +89,15 @@ public final class CTSConfig {
         SESSION_TIMEOUT = builder.comment("Ticks before an unrecoverable wreck is abandoned.")
                 .defineInRange("sessionTimeoutTicks", 12000, 200, 200000);
         CONVERT_TRAINS = builder.comment(
-                        "Replace Create trains with Sable structures (the old behaviour).",
-                        "Off by default: vehicles are now built out of rail trucks instead, which needs no",
-                        "conversion and cannot produce a second copy of the train.")
-                .define("convertCreateTrains", false);
+                        "Trains are physical: every carriage is a Sable sub-level held on the rails by",
+                        "forces, not by teleporting it along Create's spline.",
+                        "Turn this off only to leave trains entirely to Create.")
+                .define("physicalTrains", true);
         CONVERT_ON_ASSEMBLY = builder.comment(
-                        "Represent every train as Sable sub-levels as soon as it exists, instead of waiting for a derailment.",
-                        "Disable this to keep Create's own contraption rendering until a train crashes.")
-                .define("convertOnAssembly", true);
+                        "A train becomes physical the moment it is assembled, not only once it crashes.",
+                        "Assembled vehicles are attached to the rail under their axles and stay on it",
+                        "until the wheels lose it.")
+                .define("physicalAtAssembly", true);
         builder.pop();
 
         builder.comment("Wheel/rail contact. Mass is in Sable's kpg unit, forces in kpg*m/s^2.")
@@ -179,7 +180,7 @@ public final class CTSConfig {
         RAIL_ANGLE_TOLERANCE = builder.comment("Orientation error in radians above which the rails count as overloaded.")
                 .defineInRange("angleTolerance", 0.35, 0.0, 3.1415);
         RAILS_COUPLING_ENABLED = builder.comment(
-                        "Couple the carriages of a converted train with a spring and damper.")
+                        "Couple the carriages of a physical train with a spring and damper.")
                 .define("coupling", true);
         RAILS_COUPLING_STIFFNESS = builder.comment("Coupling stiffness in 1/s^2 per block of extension.")
                 .defineInRange("couplingStiffness", 8.0, 0.0, 10000.0);
@@ -257,8 +258,8 @@ public final class CTSConfig {
     private CTSConfig() {
     }
 
-    /** True when the old train conversion is enabled; off by default. */
-    public static boolean convertTrains() {
+    /** True when trains are physical, i.e. represented by Sable sub-levels. */
+    public static boolean physicalTrains() {
         return CONVERT_TRAINS.get();
     }
 
@@ -274,8 +275,8 @@ public final class CTSConfig {
                 GRAVITY.get()).validated();
     }
 
-    /** True when assembled trains should be replaced by Sable structures straight away. */
-    public static boolean convertOnAssembly() {
+    /** True when a freshly assembled train becomes a Sable structure immediately. */
+    public static boolean physicalAtAssembly() {
         return CONVERT_ON_ASSEMBLY.get();
     }
 

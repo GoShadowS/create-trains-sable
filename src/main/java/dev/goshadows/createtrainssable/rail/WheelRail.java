@@ -108,16 +108,19 @@ public final class WheelRail {
                     targetSpeed - along);
         }
 
-        // Every value below is an acceleration of the *whole* vehicle; turning it into a force for
-        // one axle happens once, at `forceScale`, so nothing is shared twice.
+        // Every value below is an acceleration of the *whole* vehicle, so each axle contributes its
+        // equal share and the shares add up to one vehicle. The flange spring and the weight are
+        // therefore divided by the number of axles - driven or not - while traction is divided by
+        // the number of driven axles, because only those pull.
         //
-        // 1. Hold the axle on the rail, and carry the weight. The engine already pulls the vehicle
-        // down with the gravity of the dimension, so the rail has to give exactly that back: one g,
-        // not one g per truck. The spring is per axle, so it is not divided either.
+        // 1. Hold the axle on the rail, and carry the weight. The engine pulls the vehicle down with
+        // the gravity of the dimension, so the rail gives exactly that back: one g in total, and the
+        // vertical contact is stiff because steel on steel is stiff - a soft contact would let the
+        // body float a hand's width above the rail head.
         double lateralAcceleration = -settings.guideStiffness() * lateralError
                 - settings.guideDamping() * lateralSpeed;
-        double verticalAcceleration = -settings.guideStiffness() * verticalError
-                - settings.guideDamping() * verticalSpeed
+        double verticalAcceleration = -settings.contactStiffness() * verticalError
+                - settings.contactDamping() * verticalSpeed
                 + gravity;
 
         double guide = Math.hypot(lateralAcceleration, verticalAcceleration);
@@ -130,21 +133,23 @@ public final class WheelRail {
                 .add(track.up().scale(verticalAcceleration));
 
         // 2. Traction along the rail, capped by what the wheel can actually transmit.
+        double adhesion = settings.friction() * gravity;
         double demand;
+        int alongShare;
         if (driven) {
             demand = clamp((targetSpeed - along) * 4.0, -settings.brake(), settings.traction());
+            demand = clamp(demand, -Math.min(settings.brake(), adhesion),
+                    Math.min(settings.traction(), adhesion));
+            alongShare = Math.max(1, drivenCount);
         } else {
             // An idler does not pull: it only takes energy out of the vehicle.
             demand = clamp(-along * 0.8, -settings.brake(), 0.0);
+            alongShare = Math.max(1, truckCount);
         }
-        // A wheel carries 1/truckCount of the weight, and pushes 1/truckCount of the mass, so the
-        // ratio - and with it the grip - does not depend on how many axles the vehicle has.
-        double adhesion = settings.friction() * gravity;
-        demand = clamp(demand, -Math.min(settings.brake(), adhesion),
-                Math.min(settings.traction(), adhesion));
 
-        double forceScale = mass / Math.max(1, driven ? drivenCount : truckCount);
-        Vec force = support.add(track.tangent().scale(demand)).scale(forceScale);
+        double supportShare = mass / Math.max(1, truckCount);
+        Vec force = support.scale(supportShare)
+                .add(track.tangent().scale(demand * mass / alongShare));
 
         // 3. Steer the body along the rail. Each truck adds its own share of one correction, or a
         // vehicle with six axles would turn six times as hard as a vehicle with one.

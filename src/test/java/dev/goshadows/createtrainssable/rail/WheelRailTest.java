@@ -124,6 +124,19 @@ class WheelRailTest {
     }
 
     @Test
+    void supportIsSharedEvenlyWhenOnlySomeAxlesAreDriven() {
+        // The harness found this one: with one driven axle on a two-axle vehicle the driven axle
+        // was scaling its share by the driven count, so it pushed twice its half of the weight and
+        // the body climbed off the rail.
+        double mass = 400.0;
+        WheelRail.Output driven = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
+                new Vec(1, 0, 0), Vec.ZERO, 0.0, true, 2, 1, mass, SETTINGS.gravity(), 10.0,
+                SETTINGS);
+        assertEquals(mass * SETTINGS.gravity() / 2.0, driven.force().y(), mass * 1.0e-6,
+                "a driven axle carries half the weight, not all of it");
+    }
+
+    @Test
     void gripIsTheSameOnOneAxleAsOnSix() {
         // A wheel grips in proportion to the weight it carries and the mass it pushes; both are
         // shared by the axle count, so the acceleration the vehicle can reach is not.

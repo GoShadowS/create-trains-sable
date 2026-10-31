@@ -17,6 +17,8 @@ public record TruckSettings(
         // Guidance
         double guideStiffness,
         double guideDamping,
+        double contactStiffness,
+        double contactDamping,
         double maxGuideAcceleration,
         double alignGain,
         double alignDamping,
@@ -43,7 +45,7 @@ public record TruckSettings(
         return new TruckSettings(
                 0.05, 60.0,
                 1.2, 1.6, 0.45,
-                18.0, 6.0, 26.0,
+                18.0, 6.0, 220.0, 24.0, 26.0,
                 3.0, 1.5, 8.0,
                 1.2, 0.9, 2.6,
                 24.0, 2, 40, 3.0,
@@ -61,6 +63,8 @@ public record TruckSettings(
                 clamp(friction, 0.0, 2.0),
                 clamp(guideStiffness, 0.0, 500.0),
                 clamp(guideDamping, 0.0, 200.0),
+                clamp(contactStiffness, 1.0, 2000.0),
+                clamp(contactDamping, 0.0, 500.0),
                 clamp(maxGuideAcceleration, 0.1, 500.0),
                 clamp(alignGain, 0.0, 100.0),
                 clamp(alignDamping, 0.0, 100.0),

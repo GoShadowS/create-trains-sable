@@ -468,7 +468,16 @@ public final class SelfTest {
      */
     private static final class DerailScenario extends Scenario {
 
-        private static final double PUSH = 6.0;
+        /**
+         * Sideways speed the harness gives the body.
+         *
+         * <p>The flange can decelerate the vehicle at {@code maxGuideAcceleration}, so a push stops
+         * within {@code v^2 / 2a} of where it started: at 26 m/s^2 that is 0.7 blocks for 6 m/s,
+         * which the flange absorbs. Ten metres per second needs 1.9 blocks, past the 1.2 block
+         * flange limit, so this is the first push that is actually a derailment - and that boundary
+         * is the model's, not the test's.</p>
+         */
+        private static final double PUSH = 10.0;
 
         private double horizontalSpeed;
         private double dropped;

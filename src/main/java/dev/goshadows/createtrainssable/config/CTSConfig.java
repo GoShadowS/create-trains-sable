@@ -14,6 +14,8 @@ public final class CTSConfig {
     private static final ModConfigSpec.DoubleValue FRICTION;
     private static final ModConfigSpec.DoubleValue GUIDE_STIFFNESS;
     private static final ModConfigSpec.DoubleValue GUIDE_DAMPING;
+    private static final ModConfigSpec.DoubleValue CONTACT_STIFFNESS;
+    private static final ModConfigSpec.DoubleValue CONTACT_DAMPING;
     private static final ModConfigSpec.DoubleValue MAX_GUIDE;
     private static final ModConfigSpec.DoubleValue ALIGN_GAIN;
     private static final ModConfigSpec.DoubleValue ALIGN_DAMPING;
@@ -58,6 +60,13 @@ public final class CTSConfig {
                 .defineInRange("guideStiffness", 18.0, 0.0, 500.0);
         GUIDE_DAMPING = builder.comment("Damping of that push, in 1/s.")
                 .defineInRange("guideDamping", 6.0, 0.0, 200.0);
+        CONTACT_STIFFNESS = builder.comment(
+                        "Stiffness of the vertical contact, in 1/s^2 per block.",
+                        "Steel on steel is stiff: this is what keeps the wheels on the rail head",
+                        "instead of floating above it by the sag of the flange spring.")
+                .defineInRange("contactStiffness", 220.0, 1.0, 2000.0);
+        CONTACT_DAMPING = builder.comment("Damping of the vertical contact, in 1/s.")
+                .defineInRange("contactDamping", 24.0, 0.0, 500.0);
         MAX_GUIDE = builder.comment("Largest acceleration the wheel/rail contact may deliver, in m/s^2.")
                 .defineInRange("maxGuideAcceleration", 26.0, 0.1, 500.0);
         ALIGN_GAIN = builder.comment("How strongly the vehicle is turned to follow the rail.")
@@ -120,7 +129,8 @@ public final class CTSConfig {
         return new TruckSettings(
                 SPEED_PER_RPM.get(), MAX_SPEED.get(),
                 TRACTION.get(), BRAKE.get(), FRICTION.get(),
-                GUIDE_STIFFNESS.get(), GUIDE_DAMPING.get(), MAX_GUIDE.get(),
+                GUIDE_STIFFNESS.get(), GUIDE_DAMPING.get(),
+                CONTACT_STIFFNESS.get(), CONTACT_DAMPING.get(), MAX_GUIDE.get(),
                 ALIGN_GAIN.get(), ALIGN_DAMPING.get(), MAX_ANGULAR.get(),
                 MAX_LATERAL.get(), MAX_VERTICAL.get(), CURVE_LIMIT.get(),
                 SCAN_RADIUS.get(), RECHECK_TICKS.get(), ATTACH_TICKS.get(), ATTACH_RADIUS.get(),

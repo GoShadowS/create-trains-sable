@@ -98,6 +98,21 @@ maxAcceleration = 14.0
 - Sable 2.0.x (required: a truck is a block entity Sable ticks on a sub-level)
 - Java 21
 
+## What is verified, and what is not
+
+Verified on every push, by the workflow in `.github/workflows/build.yml`:
+
+- the mod compiles (Gradle, Java 21, NeoForge 1.21.1);
+- the rail-contact arithmetic passes its unit tests - 12 cases covering holding the rail, leaving
+  it past the flange, the attach window, overspeed on a curve, the adhesion cap, weight and grip
+  sharing between axles, and the steering correction;
+- a dedicated server starts, loads the mod and reaches `Done (`.
+
+**Not verified:** nothing in this repository has been driven in a world with a player. The feel -
+acceleration, brake distances, how tight a curve can be taken, whether the trucks sit where the
+build expects - is untuned, and every number in the configuration section is an estimate from
+physics, not a measurement from play. Treat the mod as a working mechanism, not a finished ride.
+
 ## Known limitations
 
 - **Assembly takes the whole connected structure.** The assembly tool gathers everything touching
@@ -111,8 +126,15 @@ maxAcceleration = 14.0
   slip curve; tight S-bends are where this shows first.
 - **Couplings do not transmit torque or bend.** They pull and push along one line, which is what a
   screw coupling does, and nothing more.
-- **The art is a first pass.** The blocks are drawn in 16x16 by `tools/make_textures.py`; they are
-  readable and consistent, not final.
+- **The art is a first pass.** The textures are drawn in 16x16 by `tools/make_textures.py` and the
+  models by `tools/make_models.py`; every face gets a UV window sized from its own box, and
+  `tools/preview_models.py` renders the three models with the real textures so a stretched face or
+  a box inside another box is visible without launching the game. They are readable and consistent,
+  not final art.
+- **A vehicle cannot be turned back into blocks.** Sable exposes assembly and removal but no
+  disassembly, so an assembled vehicle is edited inside its sub-level or removed with Sable's own
+  command. Writing a disassembler means writing blocks back into the world on top of terrain that
+  may now be occupied, and that is not something to ship without playing it first.
 - **Sable's API is not semver-stable.** A Sable update can require an update here.
 
 ## License

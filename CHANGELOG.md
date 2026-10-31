@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.1 - fixes found by reading the rebuilt code
+
+0.2.0 built and booted, so the next pass went through the arithmetic and the pipeline instead.
+
+### Fixed
+
+- **The gravity the contact carries is the dimension's, not a config guess.** Sable builds its
+  pipeline with `DimensionPhysicsData.getGravity(level)`, so the engine applies the gravity of the
+  dimension; the contact used a constant. In any dimension whose gravity is not 9.81 the vehicle
+  sank through the track or floated off it. The contact now takes gravity as an argument and the
+  config value is only a fallback.
+- **Weight, grip and steering were divided between axles twice.** Each truck reports an
+  acceleration of the whole vehicle, which becomes a force once, by `mass / axleCount`; three of
+  those accelerations were divided by the axle count *again*. A four-axle vehicle was therefore
+  held up by a quarter of its weight, had a quarter of its grip, and its steering correction was
+  added four times. Now one `g` for the vehicle, `mu*g` of grip whatever the axle count, and the
+  steering shared. Four unit tests pin the scaling for 1, 2, 4 and 6 axles.
+
+### Added
+
+- **Vehicle Assembly Tool.** Sable ships no item that assembles a structure, so the only way to
+  make a vehicle physical was a command. The tool does what the command does, on right click, and
+  wears out.
+- **Readable block models.** Every face now uses a UV window sized from its own box, so the wheels
+  are round and the frame keeps its rivets; the driven truck has a motor housing and the idler a
+  bolted cover, so the two are distinguishable.
+- **`tools/preview_models.py`** renders the models with the real textures (back-face culling,
+  painter's algorithm, inventory camera) so the models can be checked without launching the game.
+- **Russian names** for the blocks, the tool and the config sections.
+
+### Changed
+
+- The workflow reports on every commit: `tools/test_summary.py` puts the number of tests and the
+  name of any failure into the commit comment, and the boot job quotes Minecraft's `Done (` line
+  and the mod's own load line - and fails if that line is missing.
+- `rail/RailPath.java`, the unused second implementation of "find the rail under a point", removed.
+
+### Still not verified
+
+Nothing here has been driven in a world. The unit tests pin the arithmetic and the server boots
+with the mod loaded; handling, brake distance and the choice of constants are untested.
+
 ## 0.2.0 - full architecture revision
 
 The previous versions did not work and are not carried over. This entry says what was wrong,

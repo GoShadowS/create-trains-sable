@@ -27,7 +27,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
-import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -253,7 +252,7 @@ final class TestRig {
 
     /** Yaw of the body in degrees; a body that is turning instead of moving shows up here. */
     double yawDegrees() {
-        Vector3f euler = body.logicalPose().orientation().getEulerAnglesYXZ(new Vector3f());
+        Vector3d euler = body.logicalPose().orientation().getEulerAnglesYXZ(new Vector3d());
         return Math.toDegrees(euler.y);
     }
 

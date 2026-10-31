@@ -610,6 +610,7 @@ public final class SelfTest {
         private double lateralMax;
         private double anchorGap = Double.NaN;
         private int riseTick = -1;
+        private boolean inRailwayManager;
         private final List<Double> speeds = new ArrayList<>();
 
         BridgeScenario() {
@@ -688,7 +689,8 @@ public final class SelfTest {
             travelledBody = rig.centre().x() - startCentre;
             anchorGap = anchorGap();
             riseTick = rampTicks();
-            if (Create.RAILWAYS.trains.get(train.id) != train) {
+            inRailwayManager = Create.RAILWAYS.trains.get(train.id) == train;
+            if (!inRailwayManager) {
                 fail("the train is no longer in Create's railway manager");
                 return;
             }
@@ -776,6 +778,7 @@ public final class SelfTest {
                     + " ordered=" + f(train == null ? 0.0 : train.speed * CarriageBody.TICKS_PER_SECOND)
                     + " peak=" + f(peak)
                     + " rise_ticks=" + riseTick
+                    + " in_railway_manager=" + inRailwayManager
                     + " ticks=" + ticks;
         }
 

@@ -5,7 +5,7 @@ issueTrackerURL = "https://github.com/GoShadowS/create-trains-sable/issues"
 
 [[mods]]
 modId = "createtrainssable"
-version = "0.3.0"
+version = "0.3.1"
 displayName = "Create Trains Sable"
 authors = "GoShadowS"
 description = '''

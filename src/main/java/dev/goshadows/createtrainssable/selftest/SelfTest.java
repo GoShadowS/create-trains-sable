@@ -280,6 +280,7 @@ public final class SelfTest {
                     + " trucks=" + truckCount
                     + " mass=" + f(mass)
                     + " states=" + states()
+                    + " removed=" + (rig != null && rig.isRemoved())
                     + " ticks=" + ticks;
         }
     }

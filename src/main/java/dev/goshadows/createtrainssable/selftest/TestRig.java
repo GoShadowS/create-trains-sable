@@ -13,12 +13,15 @@ import dev.goshadows.createtrainssable.rail.TruckBlockEntity;
 import dev.goshadows.createtrainssable.rail.Vec;
 import dev.ryanhcode.sable.api.SubLevelAssemblyHelper;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
+import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
+import dev.ryanhcode.sable.api.sublevel.ticket.SubLevelLoadingTicketType;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.storage.SubLevelRemovalReason;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Unit;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -49,16 +52,27 @@ final class TestRig {
     private static final int RAIL_BEFORE = 40;
     private static final int RAIL_AFTER = 120;
 
+    /**
+     * Distance between two rail nodes.
+     *
+     * <p>Create places a node every couple of blocks, and the contact only looks at edges attached
+     * to a node within {@code scanRadius} of the axle, so a rail made of one long edge is invisible
+     * to it. Eight blocks is comfortably inside the default scan radius of 24.</p>
+     */
+    private static final int NODE_SPACING = 8;
+
     final ServerLevel level;
+    final ServerSubLevelContainer container;
     final ServerSubLevel body;
     final TrackGraph graph;
     final List<TruckBlockEntity> trucks;
     final double railZ;
     final int blockCount;
 
-    private TestRig(ServerLevel level, ServerSubLevel body, TrackGraph graph,
-                    List<TruckBlockEntity> trucks, double railZ, int blockCount) {
+    private TestRig(ServerLevel level, ServerSubLevelContainer container, ServerSubLevel body,
+                    TrackGraph graph, List<TruckBlockEntity> trucks, double railZ, int blockCount) {
         this.level = level;
+        this.container = container;
         this.body = body;
         this.graph = graph;
         this.trucks = trucks;
@@ -100,13 +114,22 @@ final class TestRig {
             throw new IllegalStateException("assemble returned no sub-level");
         }
 
+        ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
+        if (container == null) {
+            throw new IllegalStateException("no sub-level container for the level");
+        }
+        // A player standing next to the vehicle keeps its plot loaded through an inhabited-chunk
+        // ticket. A scripted server has no player, so the harness takes the same forced ticket
+        // Sable's own command uses; without it the plot unloads and the body is removed.
+        container.addForceLoadTicket(body, SubLevelLoadingTicketType.COMMAND_FORCED, Unit.INSTANCE);
+
         List<TruckBlockEntity> trucks = new ArrayList<>(2);
         for (var actor : body.getPlot().getBlockEntityActors()) {
             if (actor instanceof TruckBlockEntity truck) {
                 trucks.add(truck);
             }
         }
-        return new TestRig(level, body, graph, trucks, railZ, gathered.blocks().size());
+        return new TestRig(level, container, body, graph, trucks, railZ, gathered.blocks().size());
     }
 
     private static void placeTruck(ServerLevel level, BlockPos pos, TruckBlock block) {
@@ -114,17 +137,22 @@ final class TestRig {
         level.setBlockAndUpdate(pos, state);
     }
 
-    /** A straight two-node track, registered exactly the way a built one would be. */
+    /** A straight rail, made of short edges the way a built one is, registered in Create's graph. */
     private static TrackGraph buildRail(ServerLevel level, int fromX, int toX, int y, double z) {
         TrackGraph graph = new TrackGraph();
-        TrackNode a = new TrackNode(new TrackNodeLocation(fromX, y, z).in(level.dimension()),
-                TrackGraph.nextNodeId(), new Vec3(0, 1, 0));
-        TrackNode b = new TrackNode(new TrackNodeLocation(toX, y, z).in(level.dimension()),
-                TrackGraph.nextNodeId(), new Vec3(0, 1, 0));
-        graph.addNode(a);
-        graph.addNode(b);
-        graph.putConnection(a, b, new TrackEdge(a, b, (BezierConnection) null, TrackMaterial.ANDESITE));
-        graph.putConnection(b, a, new TrackEdge(b, a, (BezierConnection) null, TrackMaterial.ANDESITE));
+        TrackNode previous = null;
+        for (int x = fromX; x <= toX; x += NODE_SPACING) {
+            TrackNode node = new TrackNode(new TrackNodeLocation(x, y, z).in(level.dimension()),
+                    TrackGraph.nextNodeId(), new Vec3(0, 1, 0));
+            graph.addNode(node);
+            if (previous != null) {
+                graph.putConnection(previous, node,
+                        new TrackEdge(previous, node, (BezierConnection) null, TrackMaterial.ANDESITE));
+                graph.putConnection(node, previous,
+                        new TrackEdge(node, previous, (BezierConnection) null, TrackMaterial.ANDESITE));
+            }
+            previous = node;
+        }
         Create.RAILWAYS.putGraph(graph);
         return graph;
     }
@@ -215,10 +243,15 @@ final class TestRig {
 
     /** Removes the body and the synthetic rail, so the next scenario starts clean. */
     void remove() {
-        var container = SubLevelContainer.getContainer(level);
-        if (container != null) {
+        container.removeForceLoadTicket(body, SubLevelLoadingTicketType.COMMAND_FORCED, Unit.INSTANCE);
+        if (!body.isRemoved()) {
             container.removeSubLevel(body, SubLevelRemovalReason.REMOVED);
         }
         Create.RAILWAYS.removeGraph(graph);
+    }
+
+    /** True once the engine has dropped the body; a scenario that sees this has a bug to report. */
+    boolean isRemoved() {
+        return body.isRemoved();
     }
 }

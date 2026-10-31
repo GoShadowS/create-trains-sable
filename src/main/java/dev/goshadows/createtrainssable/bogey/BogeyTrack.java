@@ -14,12 +14,12 @@ import java.util.Optional;
 /**
  * The piece of Create track a bogey is currently riding on.
  *
- * <p>This is the Simurail idea in one type: a physics vehicle does not follow the track because
- * something moves it along a spline, it follows the track because there is a rail under each axle and
- * the axle is held onto it. To hold it on, the mod has to know where the rail is: this finds the
- * nearest edge of Create's {@code TrackGraph}, with the tangent and the normal at that exact point.
- * A straight piece of track and a curved {@code BezierConnection} are handled by the same code
- * because {@link TrackEdge#getPosition} and {@link TrackEdge#getNormal} already know about turns.</p>
+ * <p>A physics vehicle does not follow the track because something moves it along a spline, it
+ * follows the track because there is a rail under each axle and the axle is held onto it. To hold it
+ * on, the mod has to know where the rail is: this finds the nearest edge of Create's
+ * {@code TrackGraph}, with the tangent and the normal at that exact point. Straight track and a
+ * curved {@code BezierConnection} are handled by the same code because
+ * {@link TrackEdge#getPosition} and {@link TrackEdge#getNormal} already know about turns.</p>
  */
 public record BogeyTrack(TrackGraph graph, TrackEdge edge, double t, Vec3 position, Vec3 tangent,
                          Vec3 normal, Vec3 lateral, double distance, double curvature) {

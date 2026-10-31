@@ -37,6 +37,21 @@ public final class CTSConfig {
     private static final ModConfigSpec.IntValue RESYNC_STABLE_TICKS;
     private static final ModConfigSpec.BooleanValue AUTO_RESYNC;
 
+    private static final ModConfigSpec.BooleanValue PHYSICAL_RAILS;
+    private static final ModConfigSpec.DoubleValue RAIL_POSITION_GAIN;
+    private static final ModConfigSpec.DoubleValue RAIL_VELOCITY_GAIN;
+    private static final ModConfigSpec.DoubleValue RAIL_MAX_ACCELERATION;
+    private static final ModConfigSpec.DoubleValue RAIL_ANGULAR_GAIN;
+    private static final ModConfigSpec.DoubleValue RAIL_ANGULAR_VELOCITY_GAIN;
+    private static final ModConfigSpec.DoubleValue RAIL_MAX_ANGULAR_ACCELERATION;
+    private static final ModConfigSpec.DoubleValue RAIL_ANGLE_TOLERANCE;
+    private static final ModConfigSpec.BooleanValue COUPLING_ENABLED;
+    private static final ModConfigSpec.DoubleValue COUPLING_STIFFNESS;
+    private static final ModConfigSpec.DoubleValue COUPLING_DAMPING;
+    private static final ModConfigSpec.DoubleValue COUPLING_MAX_ACCELERATION;
+    private static final ModConfigSpec.DoubleValue RAIL_LATERAL_TOLERANCE;
+    private static final ModConfigSpec.IntValue RAIL_TOLERANCE_TICKS;
+
     private static final ModConfigSpec.BooleanValue CONVERT_ON_ASSEMBLY;
     private static final ModConfigSpec.BooleanValue SHOW_RAPIER_HITBOXES;
 
@@ -113,6 +128,44 @@ public final class CTSConfig {
                 .define("autoResync", false);
         builder.pop();
 
+        builder.comment(
+                        "How a running train is held on its rails.",
+                        "Physical rails push the carriages with forces and never move them, so a train can be",
+                        "pushed off the track. Kinematic rails teleport the carriage structure onto Create's",
+                        "carriages every tick: cheaper, but nothing can ever derail a moving train.")
+                .push("rails");
+        PHYSICAL_RAILS = builder.comment("Use forces instead of teleporting the structure.")
+                .define("physical", true);
+        RAIL_POSITION_GAIN = builder.comment("Position stiffness in 1/s^2.")
+                .defineInRange("positionGain", 10.0, 0.0, 100.0);
+        RAIL_VELOCITY_GAIN = builder.comment("Velocity damping in 1/s.")
+                .defineInRange("velocityGain", 4.0, 0.0, 100.0);
+        RAIL_MAX_ACCELERATION = builder.comment(
+                        "Largest acceleration the wheel/rail contact can deliver, in m/s^2.",
+                        "Exceeding it is wheel slip or, if it lasts, a derailment.")
+                .defineInRange("maxAcceleration", 24.0, 0.1, 500.0);
+        RAIL_ANGULAR_GAIN = builder.comment("Orientation stiffness in 1/s^2.")
+                .defineInRange("angularGain", 5.0, 0.0, 100.0);
+        RAIL_ANGULAR_VELOCITY_GAIN = builder.comment("Orientation damping in 1/s.")
+                .defineInRange("angularVelocityGain", 2.0, 0.0, 100.0);
+        RAIL_MAX_ANGULAR_ACCELERATION = builder.comment("Largest angular acceleration the rails deliver.")
+                .defineInRange("maxAngularAcceleration", 12.0, 0.1, 500.0);
+        RAIL_ANGLE_TOLERANCE = builder.comment("Orientation error in radians above which the rails count as overloaded.")
+                .defineInRange("angleTolerance", 0.35, 0.0, 3.1415);
+        COUPLING_ENABLED = builder.comment("Couple neighbouring carriages with a spring and damper.")
+                .define("coupling", true);
+        COUPLING_STIFFNESS = builder.comment("Coupler stiffness in 1/s^2 per block of extension.")
+                .defineInRange("couplingStiffness", 8.0, 0.0, 10000.0);
+        COUPLING_DAMPING = builder.comment("Coupler damping in 1/s.")
+                .defineInRange("couplingDamping", 4.0, 0.0, 10000.0);
+        COUPLING_MAX_ACCELERATION = builder.comment("Strongest acceleration a coupler may transfer, in m/s^2.")
+                .defineInRange("couplingMaxAcceleration", 20.0, 0.0, 500.0);
+        RAIL_LATERAL_TOLERANCE = builder.comment("Distance from the ideal carriage pose that counts as leaving the rails, in blocks.")
+                .defineInRange("lateralTolerance", 1.5, 0.0, 16.0);
+        RAIL_TOLERANCE_TICKS = builder.comment("Consecutive overloaded ticks before the train derails.")
+                .defineInRange("toleranceTicks", 10, 1, 200);
+        builder.pop();
+
         builder.comment("Diagnostics.").push("debug");
         SHOW_RAPIER_HITBOXES = builder.comment(
                         "Log body poses, velocities and bounds; Sable draws the actual colliders in its client overlay.")
@@ -139,6 +192,12 @@ public final class CTSConfig {
                 new Tuning.Derailment(CANT_RELIEF_FACTOR.get(), FLANGE_COEFFICIENT.get(),
                         HALF_GAUGE.get(), CENTRE_OF_GRAVITY_HEIGHT.get(), MAX_CURVE_RADIUS.get(),
                         OVERSPEED_GRACE.get(), IMPACT_SPEED_THRESHOLD.get(), HARD_BRAKE_DECELERATION.get()),
+                new Tuning.Rails(PHYSICAL_RAILS.get(), RAIL_POSITION_GAIN.get(), RAIL_VELOCITY_GAIN.get(),
+                        RAIL_MAX_ACCELERATION.get(), RAIL_ANGULAR_GAIN.get(),
+                        RAIL_ANGULAR_VELOCITY_GAIN.get(), RAIL_MAX_ANGULAR_ACCELERATION.get(),
+                        RAIL_ANGLE_TOLERANCE.get(), COUPLING_ENABLED.get(), COUPLING_STIFFNESS.get(),
+                        COUPLING_DAMPING.get(), COUPLING_MAX_ACCELERATION.get(),
+                        RAIL_LATERAL_TOLERANCE.get(), RAIL_TOLERANCE_TICKS.get()),
                 new Tuning.Rebinding(RESYNC_MAX_SPEED.get(), RESYNC_MAX_ANGULAR_SPEED.get(),
                         RESYNC_MAX_TILT.get(), RESYNC_MAX_TRACK_DISTANCE.get(), RESYNC_STABLE_TICKS.get(),
                         AUTO_RESYNC.get()),

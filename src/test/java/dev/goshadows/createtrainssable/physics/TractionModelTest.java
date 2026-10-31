@@ -26,7 +26,7 @@ class TractionModelTest {
                 new TractionModel.Demand(0.0, 1.0, 8.0, 10.0),
                 new Tuning(TUNING.general(),
                         new Tuning.Traction(0.5, 0.1, 0.45, 0.02, 3.0, 0.18, 9.81),
-                        TUNING.derailment(), TUNING.rebinding(), TUNING.debug()));
+                        TUNING.derailment(), TUNING.rails(), TUNING.rebinding(), TUNING.debug()));
         assertTrue(result.slipping());
         assertTrue(result.slipRatio() > 0.18);
         assertTrue(result.force() < 0.0);

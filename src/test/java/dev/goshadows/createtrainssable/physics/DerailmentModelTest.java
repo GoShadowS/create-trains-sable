@@ -58,7 +58,8 @@ class DerailmentModelTest {
     void alwaysModeConvertsEvenOnStraightTrackAtLowSpeed() {
         Tuning always = new Tuning(
                 new Tuning.General(true, Tuning.ConversionMode.ALWAYS, 10, 12000),
-                TUNING.traction(), TUNING.derailment(), TUNING.rebinding(), TUNING.debug());
+                TUNING.traction(), TUNING.derailment(), TUNING.rails(), TUNING.rebinding(),
+                TUNING.debug());
         assertEquals(DerailmentModel.Trigger.CONFIG_ALWAYS, DerailmentModel.evaluate(
                 new DerailmentModel.Inputs(0.2, Double.POSITIVE_INFINITY, 0.0, 0.0, false), always).trigger());
     }

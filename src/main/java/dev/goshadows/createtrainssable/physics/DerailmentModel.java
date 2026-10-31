@@ -3,6 +3,10 @@ package dev.goshadows.createtrainssable.physics;
 /**
  * Decides when a Create train must leave its TrackGraph and become a rigid body.
  *
+ * <p>{@link Trigger#LEFT_TRACK} is not computed here: it is reported by the rail controller after
+ * the body has been unable to follow its carriage for long enough, which is what happens when the
+ * train hits something that does not move.</p>
+ *
  * <p>The curve limit combines two classical criteria: overturning (lateral acceleration
  * exceeds {@code g * halfGauge / centreOfGravityHeight}) and flange climb (lateral force
  * exceeds {@code g * flangeCoefficient}). {@code cantReliefFactor} accounts for the banking
@@ -16,6 +20,8 @@ public final class DerailmentModel {
         COLLISION,
         HARD_BRAKING,
         CREATE_CRASH,
+        /** The body stopped following its carriage: the wheels left the rails under a load. */
+        LEFT_TRACK,
         CONFIG_ALWAYS
     }
 

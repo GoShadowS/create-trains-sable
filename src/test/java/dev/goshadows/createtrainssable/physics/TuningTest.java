@@ -19,6 +19,8 @@ class TuningTest {
                 new Tuning.General(true, null, 0, 1),
                 new Tuning.Traction(Double.NaN, -5.0, 0.0, -1.0, 100.0, 0.0, Double.POSITIVE_INFINITY),
                 new Tuning.Derailment(-1.0, 0.0, 0.0, 0.0, -2.0, 0.5, -1.0, -3.0),
+                new Tuning.Rails(true, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0,
+                        true, -1.0, -1.0, -1.0, -1.0, 0),
                 new Tuning.Rebinding(-1.0, -1.0, -1.0, -1.0, 0, true),
                 new Tuning.Debug(false));
 
@@ -32,6 +34,10 @@ class TuningTest {
         assertEquals(0.0, fixed.rebinding().maxSpeed());
         assertEquals(1, fixed.rebinding().stableTicks());
         assertTrue(Double.isFinite(DerailmentModel.safeSpeed(0.5, fixed)));
+        assertEquals(0.0, fixed.rails().positionGain());
+        assertEquals(0.1, fixed.rails().maxAcceleration());
+        assertEquals(0.0, fixed.rails().angleTolerance());
+        assertEquals(1, fixed.rails().toleranceTicks());
     }
 
     @Test
@@ -40,6 +46,7 @@ class TuningTest {
                 new Tuning.General(true, Tuning.ConversionMode.DISABLED, 10, 12000),
                 Tuning.defaults().traction(),
                 Tuning.defaults().derailment(),
+                Tuning.defaults().rails(),
                 Tuning.defaults().rebinding(),
                 Tuning.defaults().debug());
         DerailmentModel.Inputs inputs = new DerailmentModel.Inputs(40.0, 2.0, 0.0, 0.0, false);

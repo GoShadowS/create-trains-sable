@@ -36,10 +36,14 @@ Every physics substep, every truck does three things and reports them as a force
 2. **Traction.** A driven axle tries to reach the speed its shaft asks for; an idler only rolls and
    brakes. Both are capped by the adhesion of the wheel, so a heavy vehicle accelerates slowly and a
    locomotive cannot pull what it has no grip for.
-3. **Steering.** The axle turns the body so its facing follows the tangent of the rail.
+3. **Yaw, from the contact itself.** The force is applied at the axle, not at the centre of mass, so
+   two axles pushed sideways in opposite directions turn the structure the way a bogie does. Nothing
+   writes an angular velocity: an earlier version did, and the physics harness measured the body
+   spinning a half turn and tumbling.
 
-The force is applied at the axle, not at the centre of mass, so a truck under the front of a vehicle
-turns it and a truck under the back holds it straight - which is what a bogey does.
+The contact is applied in the plane of the rail head *and* of the centre of mass: the fore/aft offset
+of the axle is what steers the vehicle, but the vertical offset would roll a body that has no
+suspension to catch it.
 
 ### Derailment
 
@@ -70,12 +74,13 @@ locomotive is genuinely held back by the wagons it pulls.
 speedPerRpm = 0.05           # m/s of target speed per RPM of the driving shaft
 maxSpeed = 60.0
 traction = 1.2               # m/s^2 the driven wheels can put down
-brake = 1.6                  # m/s^2 the brakes can remove
+brake = 1.6                 # m/s^2 the brakes can remove
 friction = 0.45              # adhesion of steel wheel on steel rail
 guideStiffness = 18.0        # how hard the flange pushes back, 1/s^2
 guideDamping = 6.0
-maxGuideAcceleration = 26.0  # grip limit of the contact, m/s^2
-alignGain = 3.0              # how strongly the body is turned along the rail
+contactStiffness = 220.0     # vertical contact: steel on steel does not sag half a block
+contactDamping = 24.0
+maxGuideAcceleration = 26.0  # grip limit of one axle's contact, m/s^2
 maxLateralError = 1.2        # blocks off the rail before the flange gives up
 maxVerticalError = 0.9
 curveLateralLimit = 2.6      # m/s^2 of lateral load a curve may take
@@ -100,18 +105,58 @@ maxAcceleration = 14.0
 
 ## What is verified, and what is not
 
-Verified on every push, by the workflow in `.github/workflows/build.yml`:
+Three things run on every push, in this order, and each has to pass:
 
-- the mod compiles (Gradle, Java 21, NeoForge 1.21.1);
-- the rail-contact arithmetic passes its unit tests - 12 cases covering holding the rail, leaving
-  it past the flange, the attach window, overspeed on a curve, the adhesion cap, weight and grip
-  sharing between axles, and the steering correction;
-- a dedicated server starts, loads the mod and reaches `Done (`.
+1. **`./gradlew build`** - the mod compiles, and the rail-contact arithmetic passes 12 unit tests
+   (holding the rail, leaving it past the flange, the attach window, overspeed on a curve, the
+   adhesion cap, weight and grip sharing between axles, the steering correction).
+2. **`./gradlew runSelfTest`** - the physics session described below. A dedicated server builds a
+   vehicle by code, lets the engine drive it, and prints what happened.
+3. **`./gradlew runServer`** - a dedicated server loads the mod and reaches `Done (`.
 
-**Not verified:** nothing in this repository has been driven in a world with a player. The feel -
-acceleration, brake distances, how tight a curve can be taken, whether the trucks sit where the
-build expects - is untuned, and every number in the configuration section is an estimate from
-physics, not a measurement from play. Treat the mod as a working mechanism, not a finished ride.
+### The physics self-test
+
+`./gradlew runSelfTest` starts a dedicated server with `-Dcts.selftest=true`. The harness
+(`selftest/`) places a five by three deck with a traction and a rolling truck under it, registers a
+straight rail in Create's own track graph, assembles the whole thing into a Sable sub-level, and
+then measures it over several hundred ticks:
+
+| Scenario | What it proves | Reported numbers |
+| --- | --- | --- |
+| `assembly` | the structure becomes a body, and its axles find the rail | blocks, trucks, mass, per-axle state |
+| `guide` | a sideways push is absorbed by the flange and the vehicle settles | worst and final lateral error, vertical offset, speed |
+| `traction` | 32 RPM really moves the vehicle at 1.6 m/s | speed, distance travelled, states |
+| `derail` | a 14 m/s sideways push leaves the rail, keeps momentum and falls | speed after the push, height lost, whether the flange ever gave up |
+
+Each scenario prints one line of numbers and the run ends with
+`CTS SELFTEST SUMMARY scenarios=4 passed=4 failed=0`; the CI job fails unless that line says
+`failed=0`. The last run on `main`:
+
+```
+assembly PASS blocks=17 trucks=2 mass=17.000 states=[GUIDING,GUIDING]
+guide    PASS lateral_max=0.046 lateral_final=0.020 vertical=0.005 speed=0.126
+traction PASS target=1.600 speed=1.424 travelled=13.050
+derail   PASS horizontal_speed=4.472 dropped=52.413 saw_off_rail=true
+```
+
+The driven axle settles at 1.42 m/s against a commanded 1.6 m/s because the idling axle is rolling
+and taking energy out; that is the model working, not a target being missed.
+
+Three honest limitations of the harness:
+
+- **the rail is synthesised**, not built from track blocks: a two-node `TrackGraph` with a straight
+  `TrackEdge`. The contact sees exactly the same thing it would see on a placed straight track, but
+  switches, curves and slopes are not covered by it yet;
+- **the shaft speed is forced** (`TruckBlockEntity.selfTestSpeed`), because a scripted server has
+  no kinetic network to take rotation from. The block's force output and the physics are real; only
+  the RPM it reads is set by the test;
+- **there is no curve in the harness yet**, so `curveLateralLimit` and the overspeed derailment are
+  covered only by the arithmetic tests. A Bezier edge in the synthetic graph is the next step.
+
+**Not verified:** nothing here has been driven in a world with a player. The feel - acceleration,
+brake distances, how tight a curve can be taken, whether the trucks sit where the build expects -
+is untuned, and every number in the configuration section is an estimate from physics, not a
+measurement from play.
 
 ## Known limitations
 

@@ -143,24 +143,48 @@ public final class RailTrack implements RailFrame {
     }
 
     /**
-     * Finds the rail nearest a point.
+     * Finds the rail nearest a point, facing the way the axle does.
      *
-     * @param previous the contact the axle had, used to prefer a connected edge so a switch or a
-     *                 Bezier joint does not teleport the contact to a neighbouring line
+     * <p>Create stores a rail twice: once as an edge from A to B and once as an edge from B to A.
+     * The two are geometrically identical and point opposite ways, so an axle that picks them
+     * arbitrarily has a contact whose tangent, lateral axis and flange push all flip. Two axles of
+     * the same vehicle then fight each other - the harness measured exactly that: a vehicle that
+     * oscillated sideways with growing amplitude while never moving forwards. The direction the
+     * truck faces decides which of the two parallel edges it rides.</p>
+     *
+     * @param previous  the contact the axle had, used to prefer a connected edge so a switch or a
+     *                  Bezier joint does not teleport the contact to a neighbouring line
+     * @param direction the way the truck faces, in world coordinates
      */
     public static Optional<RailTrack> find(ServerLevel level, Vec probe, RailTrack previous,
-                                           double maxDistance, double scanRadius) {
+                                           double maxDistance, double scanRadius, Vec direction) {
         if (previous != null) {
-            RailTrack continued = findNear(previous.graph, previous.edge, toVec3(probe), maxDistance);
+            RailTrack continued = findNear(previous.graph, previous.edge, toVec3(probe), maxDistance,
+                    direction, true);
             if (continued != null) {
                 return Optional.of(continued);
             }
         }
-        return findGlobally(level, toVec3(probe), maxDistance, scanRadius);
+        Optional<RailTrack> found = findGlobally(level, toVec3(probe), maxDistance, scanRadius,
+                direction, true);
+        if (found.isPresent()) {
+            return found;
+        }
+        // A vehicle that has turned around on the spot has nothing matching its facing; fall back
+        // to the nearest rail in either direction rather than reporting a derailment.
+        if (previous != null) {
+            RailTrack continued = findNear(previous.graph, previous.edge, toVec3(probe), maxDistance,
+                    direction, false);
+            if (continued != null) {
+                return Optional.of(continued);
+            }
+        }
+        return findGlobally(level, toVec3(probe), maxDistance, scanRadius, direction, false);
     }
 
     private static Optional<RailTrack> findGlobally(ServerLevel level, Vec3 probe, double maxDistance,
-                                                    double scanRadius) {
+                                                    double scanRadius, Vec direction,
+                                                    boolean facing) {
         // Create mutates this map while its railway manager ticks, so it is copied before use.
         List<TrackGraph> graphs = new ArrayList<>(Create.RAILWAYS.trackNetworks.values());
         RailTrack best = null;
@@ -188,7 +212,7 @@ public final class RailTrack implements RailFrame {
                     if (!visited.add(edgeKey(edge))) {
                         continue;
                     }
-                    RailTrack candidate = search(graph, edge, probe, bestSquared);
+                    RailTrack candidate = search(graph, edge, probe, bestSquared, direction, facing);
                     if (candidate != null && candidate.distance * candidate.distance < bestSquared) {
                         bestSquared = candidate.distance * candidate.distance;
                         best = candidate;
@@ -204,7 +228,8 @@ public final class RailTrack implements RailFrame {
         return new Vec3(vec.x(), vec.y(), vec.z());
     }
 
-    private static RailTrack findNear(TrackGraph graph, TrackEdge edge, Vec3 probe, double maxDistance) {
+    private static RailTrack findNear(TrackGraph graph, TrackEdge edge, Vec3 probe, double maxDistance,
+                                      Vec direction, boolean facing) {
         RailTrack best = null;
         double bestSquared = maxDistance * maxDistance;
         for (TrackNode node : new TrackNode[]{edge.node1, edge.node2}) {
@@ -213,7 +238,7 @@ public final class RailTrack implements RailFrame {
                 continue;
             }
             for (TrackEdge candidate : connections.values()) {
-                RailTrack track = search(graph, candidate, probe, bestSquared);
+                RailTrack track = search(graph, candidate, probe, bestSquared, direction, facing);
                 if (track != null && track.distance * track.distance < bestSquared) {
                     bestSquared = track.distance * track.distance;
                     best = track;
@@ -229,7 +254,8 @@ public final class RailTrack implements RailFrame {
         return a < b ? (a << 32) | (b & 0xFFFFFFFFL) : (b << 32) | (a & 0xFFFFFFFFL);
     }
 
-    private static RailTrack search(TrackGraph graph, TrackEdge edge, Vec3 probe, double limitSquared) {
+    private static RailTrack search(TrackGraph graph, TrackEdge edge, Vec3 probe, double limitSquared,
+                                    Vec direction, boolean facing) {
         if (edge.isInterDimensional() || edge.getLength() < 1.0e-3) {
             return null;
         }
@@ -266,6 +292,14 @@ public final class RailTrack implements RailFrame {
         }
         if (bestSquared > limitSquared) {
             return null;
+        }
+        if (facing && direction.lengthSqr() > 1.0e-8) {
+            Vec3 heading = edge.getDirectionAt(bestT);
+            if (heading.lengthSqr() > 1.0e-8
+                    && heading.normalize().dot(new Vec3(direction.x(), direction.y(), direction.z())) < 0.0) {
+                // The parallel edge going the other way: this axle faces forwards, that one does not.
+                return null;
+            }
         }
         return sampleAt(graph, edge, bestT, Math.sqrt(bestSquared));
     }

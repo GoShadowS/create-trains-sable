@@ -45,6 +45,10 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     private double lastSpeed;
     private double lastLateralError;
     private WheelRail.State loggedState = WheelRail.State.NO_TRACK;
+    /** Shaft speed forced by the physics harness; {@code null} in a normal game. */
+    private Float forcedSpeed;
+    /** Last force this axle asked for; read by the harness. */
+    private Vec lastForce = Vec.ZERO;
 
     public TruckBlockEntity(BlockPos pos, BlockState state) {
         super(CTSBlockEntities.TRUCK.get(), pos, state);
@@ -76,8 +80,9 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         }
         nextSearchTick = now + settings.trackRecheckTicks();
         Vec axle = axlePosition(subLevel);
+        // The truck's facing decides which of the two parallel edges of a rail it rides.
         Optional<RailTrack> found = RailTrack.find(subLevel.getLevel(), axle, track,
-                settings.maxLateralError() * 2.0 + 1.0, settings.scanRadius());
+                settings.maxLateralError() * 2.0 + 1.0, settings.scanRadius(), forward(subLevel));
         track = found.orElse(null);
         if (track == null && state != WheelRail.State.NO_TRACK) {
             log(WheelRail.State.NO_TRACK);
@@ -99,8 +104,6 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         Vec axle = axlePosition(subLevel);
         Vector3dc rawVelocity = handle.getLinearVelocity(new Vector3d());
         Vec velocity = new Vec(rawVelocity.x(), rawVelocity.y(), rawVelocity.z());
-        Vector3dc rawSpin = handle.getAngularVelocity(new Vector3d());
-        Vec spin = new Vec(rawSpin.x(), rawSpin.y(), rawSpin.z());
 
         // Between searches the contact rides along the edge under the wheel.
         if (track != null) {
@@ -114,18 +117,19 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         int trucks = countTrucks(subLevel, false);
         int driven = countTrucks(subLevel, true);
         double mass = vehicleMass(subLevel);
+        float shaftSpeed = forcedSpeed != null ? forcedSpeed : getSpeed();
         double target = isDriven()
-                ? WheelRail.targetSpeed(getSpeed(), facingSign(), settings)
+                ? WheelRail.targetSpeed(shaftSpeed, facingSign(), settings)
                 : 0.0;
 
-        WheelRail.Output output = WheelRail.solve(track, axle, velocity, forward(subLevel), spin,
-                target, isDriven(), trucks, driven, mass, gravity(subLevel, settings),
-                secondsSinceAssembly, settings);
+        WheelRail.Output output = WheelRail.solve(track, axle, velocity, target, isDriven(), trucks,
+                driven, mass, gravity(subLevel, settings), secondsSinceAssembly, settings);
         state = output.state();
         lastAxle = axle;
         lastSpeed = track == null ? 0.0 : track.speedAlong(velocity);
         lastLateralError = output.lateralError();
 
+        lastForce = output.guiding() ? output.force() : Vec.ZERO;
         if (output.guiding()) {
             apply(subLevel, handle, axle, output, timeStep);
         }
@@ -134,24 +138,30 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         }
     }
 
-    /** Turns the contact force into an impulse at the axle, and the steering into angular velocity. */
+    /**
+     * Turns the contact force into an impulse at the axle, at the height of the centre of mass.
+     *
+     * <p>The fore/aft and sideways offset of the axle is what yaws the vehicle towards the rail, and
+     * that is kept: it is how a bogie steers. The <em>vertical</em> offset is not, because a wheel is
+     * about half a block below the centre of mass and a sideways force there rolls the body about its
+     * long axis. The harness measured exactly that - the vehicle rolled to sixty degrees and tumbled
+     * after a push it should have shrugged off. A real suspension carries that roll; this model has
+     * no suspension yet, so the force is applied in the plane of the rail head and of the centre of
+     * mass at once.</p>
+     */
     private void apply(ServerSubLevel subLevel, RigidBodyHandle handle, Vec axle,
                        WheelRail.Output output, double timeStep) {
         Vec worldImpulse = output.force().scale(timeStep);
-        if (worldImpulse.lengthSqr() > 0.0) {
-            // The handle takes plot-local vectors: the pipeline rotates them by the body orientation.
-            Vector3d localImpulse = subLevel.logicalPose().transformNormalInverse(
-                    new Vector3d(worldImpulse.x(), worldImpulse.y(), worldImpulse.z()));
-            Vector3d axleInPlot = subLevel.logicalPose().transformPositionInverse(
-                    new Vector3d(axle.x(), axle.y(), axle.z()), new Vector3d());
-            handle.applyImpulseAtPoint(axleInPlot, localImpulse);
+        if (worldImpulse.lengthSqr() <= 0.0) {
+            return;
         }
-        Vec angular = output.angularAcceleration();
-        if (angular.lengthSqr() > 0.0) {
-            Vec delta = angular.scale(timeStep);
-            handle.addLinearAndAngularVelocity(new Vector3d(),
-                    new Vector3d(delta.x(), delta.y(), delta.z()));
-        }
+        // The handle takes plot-local vectors: the pipeline rotates them by the body orientation.
+        Vector3d localImpulse = subLevel.logicalPose().transformNormalInverse(
+                new Vector3d(worldImpulse.x(), worldImpulse.y(), worldImpulse.z()));
+        Vector3d axleInPlot = subLevel.logicalPose().transformPositionInverse(
+                new Vector3d(axle.x(), axle.y(), axle.z()), new Vector3d());
+        axleInPlot.y = subLevel.getMassTracker().getCenterOfMass().y();
+        handle.applyImpulseAtPoint(axleInPlot, localImpulse);
     }
 
     /** World direction the truck faces: the axle runs across it. */
@@ -227,6 +237,27 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
                     "Truck {} is too fast for the curve: speed={}, at {}", worldPosition,
                     String.format("%.2f", lastSpeed), lastAxle);
         }
+    }
+
+    /**
+     * Forces the shaft speed, for the physics harness only.
+     *
+     * <p>A dedicated server built by a script has no kinetic network to take rotation from, so the
+     * harness sets the speed the truck would otherwise read from its shaft. Nothing in a normal
+     * game calls this, and {@code null} restores the real shaft.</p>
+     */
+    public void selfTestSpeed(Float rpm) {
+        this.forcedSpeed = rpm;
+    }
+
+    /** The force this axle asked for on the last physics tick; used by the harness. */
+    public Vec lastForce() {
+        return lastForce;
+    }
+
+    /** Sideways error of this axle on the last physics tick, in blocks; used by the harness. */
+    public double lastLateralError() {
+        return lastLateralError;
     }
 
     /** Current contact state of this axle; used by diagnostics and by tests. */

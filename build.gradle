@@ -98,6 +98,16 @@ neoForge {
             programArgument '--nogui'
             systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
         }
+        // Scripted physics session: builds a vehicle, drives it and prints measurements.
+        // `./gradlew runSelfTest` runs the whole set and stops the server by itself.
+        selfTest {
+            server()
+            ideName = 'Create Trains Sable: Physics Self-Test'
+            gameDirectory = project.file('runs/selftest')
+            programArgument '--nogui'
+            systemProperty 'cts.selftest', 'true'
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        }
         gameTestServer {
             type = 'gameTestServer'
             ideName = 'Create Trains Sable: Game Tests'

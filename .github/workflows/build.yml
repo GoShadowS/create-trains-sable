@@ -101,7 +101,7 @@ jobs:
             printf '### dedicated server, commit `%s`\n\n' "${GITHUB_SHA:0:8}"
             if [ "$ok" = "1" ]; then printf 'server reached `Done (`. Mod loaded, mixins applied.\n\n'; else printf 'server did **not** reach `Done (` (fatal=%s).\n\n' "$fatal"; fi
             printf '```\n'
-            grep -E "CreateTrainsSable|Create Trains Sable|Mixin|ERROR|WARN.*sable|Done \(" /tmp/server.log | tail -70
+            tail -160 /tmp/server.log
             printf '```\n'
           } > /tmp/report.md
           gh api -X POST "repos/${{ github.repository }}/commits/${{ github.sha }}/comments" \

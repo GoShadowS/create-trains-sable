@@ -268,6 +268,26 @@ public final class SelfTest {
     }
 
     /**
+     * A one-carriage Create train on a rig's rail, registered in Create's railway manager.
+     *
+     * <p>The two bogeys sit on the two axles of the rig, so the carriage and the body start aligned
+     * and any later difference is the physics, not an offset. A standard bogey's wheel points are two
+     * blocks apart, and its first point is the front of the train, so the carriage faces east the way
+     * the rig's traction truck does.</p>
+     */
+    private static Train singleCarriageTrain(TestRig rig, double leadingAxle, double trailingAxle) {
+        CarriageBogey leading = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
+                rig.railPoint(leadingAxle + 1.0), rig.railPoint(leadingAxle - 1.0));
+        CarriageBogey trailing = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
+                rig.railPoint(trailingAxle - 1.0), rig.railPoint(trailingAxle + 1.0));
+        Carriage carriage = new Carriage(leading, trailing, 2);
+        Train train = new Train(UUID.randomUUID(), UUID.randomUUID(), rig.graph,
+                new ArrayList<>(List.of(carriage)), new ArrayList<>(), true, 0);
+        Create.RAILWAYS.addTrain(train);
+        return train;
+    }
+
+    /**
      * The vehicle exists and its axles find the rail.
      *
      * <p>This is the gate for everything else: a body with the wrong mass, a truck that did not
@@ -647,16 +667,8 @@ public final class SelfTest {
          * way the rig's traction truck does.</p>
          */
         private void buildTrain() {
-            TrackGraph graph = rig.graph;
-            CarriageBogey leading = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
-                    rig.railPoint(LEADING_AXLE + 1.0), rig.railPoint(LEADING_AXLE - 1.0));
-            CarriageBogey trailing = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
-                    rig.railPoint(TRAILING_AXLE - 1.0), rig.railPoint(TRAILING_AXLE + 1.0));
-            Carriage carriage = new Carriage(leading, trailing, 2);
-            train = new Train(UUID.randomUUID(), UUID.randomUUID(), graph,
-                    new ArrayList<>(List.of(carriage)), new ArrayList<>(), true, 0);
+            train = singleCarriageTrain(rig, LEADING_AXLE, TRAILING_AXLE);
             train.targetSpeed = COMMAND;
-            Create.RAILWAYS.addTrain(train);
             bridge = TrainBridge.bridge(train, rig.body);
             bridged = bridge.carriages().getFirst();
             startCentre = rig.centre().x();
@@ -847,6 +859,21 @@ public final class SelfTest {
 
         EntryScenario() {
             super("entry", END, 2464);
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            super.begin(level);
+            if (rig == null) {
+                return;
+            }
+            try {
+                train = singleCarriageTrain(rig, 2001.5, 2003.5);
+                train.targetSpeed = COMMAND;
+            } catch (RuntimeException | LinkageError e) {
+                fail("train: " + e);
+                finished = true;
+            }
         }
 
         @Override

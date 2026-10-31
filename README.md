@@ -219,6 +219,7 @@ derail   PASS horizontal_speed=4.472 dropped=52.413 saw_off_rail=true
 bridge   PASS carriages=1 target=1.600 speed=1.424 travelled_body=14.234
               travelled_train=14.234 drift=0.000 lateral_max=0.000
               anchor_gap=0.011 ordered=1.600 peak=1.424 rise_ticks=34
+              in_railway_manager=true
 ```
 
 The bridge scenario builds a real `Train` with a real `Carriage` on the same track graph, registers

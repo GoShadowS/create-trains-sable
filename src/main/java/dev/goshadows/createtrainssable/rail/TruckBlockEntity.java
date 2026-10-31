@@ -139,11 +139,15 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     }
 
     /**
-     * Turns the contact force into an impulse at the axle.
+     * Turns the contact force into an impulse at the axle, at the height of the centre of mass.
      *
-     * <p>Only the axle is pushed. The torque that turns the vehicle towards the rail comes from the
-     * fact that the force is offset from the centre of mass, which is what a real bogie does; writing
-     * an angular velocity as well fought the solver, and the harness caught the body spinning.</p>
+     * <p>The fore/aft and sideways offset of the axle is what yaws the vehicle towards the rail, and
+     * that is kept: it is how a bogie steers. The <em>vertical</em> offset is not, because a wheel is
+     * about half a block below the centre of mass and a sideways force there rolls the body about its
+     * long axis. The harness measured exactly that - the vehicle rolled to sixty degrees and tumbled
+     * after a push it should have shrugged off. A real suspension carries that roll; this model has
+     * no suspension yet, so the force is applied in the plane of the rail head and of the centre of
+     * mass at once.</p>
      */
     private void apply(ServerSubLevel subLevel, RigidBodyHandle handle, Vec axle,
                        WheelRail.Output output, double timeStep) {
@@ -156,6 +160,7 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
                 new Vector3d(worldImpulse.x(), worldImpulse.y(), worldImpulse.z()));
         Vector3d axleInPlot = subLevel.logicalPose().transformPositionInverse(
                 new Vector3d(axle.x(), axle.y(), axle.z()), new Vector3d());
+        axleInPlot.y = subLevel.getMassTracker().getCenterOfMass().y();
         handle.applyImpulseAtPoint(axleInPlot, localImpulse);
     }
 

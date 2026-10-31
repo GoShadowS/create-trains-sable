@@ -474,13 +474,13 @@ public final class SelfTest {
         /**
          * Sideways speed the harness gives the body.
          *
-         * <p>The flange can decelerate the vehicle at {@code maxGuideAcceleration}, so a push stops
-         * within {@code v^2 / 2a} of where it started: at 26 m/s^2 that is 0.7 blocks for 6 m/s,
-         * which the flange absorbs. Ten metres per second needs 1.9 blocks, past the 1.2 block
-         * flange limit, so this is the first push that is actually a derailment - and that boundary
-         * is the model's, not the test's.</p>
+         * <p>Every axle can decelerate the vehicle at {@code maxGuideAcceleration}, so the vehicle
+         * sheds {@code axles * 26 = 52 m/s^2} and a push stops within {@code v^2 / 104} blocks. The
+         * flange limit is 1.2 blocks, so anything above {@code sqrt(2 * 52 * 1.2) = 11.2 m/s} is a
+         * derailment and anything below it is absorbed. Fourteen metres per second is past that
+         * boundary; that boundary is the model's, not the test's.</p>
          */
-        private static final double PUSH = 10.0;
+        private static final double PUSH = 14.0;
 
         private double horizontalSpeed;
         private double dropped;

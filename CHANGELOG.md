@@ -12,6 +12,30 @@ teleport the body", not "do not touch the train". This changelog does not presen
 plan from the start: it was a wrong inference, and the mod is being rebuilt on Create's own
 `Train`, `Carriage` and `CarriageContraption` from 0.3.0.
 
+### Fixed in the physics, all found by the harness
+
+- **Weight, grip and steering were divided between axles twice.** Each axle reports an acceleration
+  of the whole vehicle, which becomes a force once; three of them were divided by the axle count
+  again, and the driven axle used the *driven* count for its share of the weight. A two-axle vehicle
+  with one driven axle pushed itself upwards at half a g and climbed off the rail.
+- **The axle could ride the wrong one of a rail's two edges.** Create stores every rail as an edge
+  from A to B and another from B to A; they are geometrically identical and point opposite ways.
+  Two axles that picked different ones pushed the body apart. The contact now takes the direction the
+  truck faces and rejects the edge that disagrees.
+- **The contact wrote angular velocity to the body.** With inertia bypassed, the harness measured the
+  vehicle yawing from 0 to -180 degrees in twenty ticks and tumbling. The steering term is gone: a
+  structure whose axles are pushed sideways in opposite directions yaws by itself.
+- **A sideways force at the wheel rolled the body.** The wheel sits half a block below the centre of
+  mass, so the flange force had a rolling lever arm, and with no suspension to catch it the body
+  reached sixty degrees of roll after a 0.5 m/s push. The force is now applied in the plane of the
+  centre of mass; the fore/aft offset that steers is kept.
+- **The vertical contact was too soft to hold a wheel on a rail.** At the flange stiffness of 18 the
+  body floated half a block above the rail head. `contactStiffness` (220) and `contactDamping` (24)
+  are separate settings now, and the harness measures 0.005 blocks of offset.
+- **The harness itself had two bugs worth recording**: a rail with one node at each end is invisible
+  to the contact, which only looks near nodes; and a plot with no player unloads within a second,
+  which removes the body. Both are fixed, the second with Sable's own forced-loading ticket.
+
 ### Added
 
 - **A physics harness that runs on a dedicated server** (`./gradlew runSelfTest`, property
@@ -29,6 +53,16 @@ plan from the start: it was a wrong inference, and the mod is being rebuilt on C
 - The rail is a synthetic two-node `TrackGraph` with a straight edge: no switches, curves or
   slopes.
 - The shaft speed is set by the test rather than read from a kinetic network.
+- There is no curve in the harness yet, so overspeed derailment is covered by arithmetic only.
+
+### Measured, not claimed
+
+```
+assembly PASS blocks=17 trucks=2 mass=17.000 states=[GUIDING,GUIDING]
+guide    PASS lateral_max=0.046 lateral_final=0.020 vertical=0.005 speed=0.126
+traction PASS target=1.600 speed=1.424 travelled=13.050
+derail   PASS horizontal_speed=4.472 dropped=52.413 saw_off_rail=true
+```
 
 ## 0.2.1 - fixes found by reading the rebuilt code
 

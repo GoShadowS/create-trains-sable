@@ -870,6 +870,8 @@ public final class SelfTest {
             try {
                 train = singleCarriageTrain(rig, 2001.5, 2003.5);
                 train.targetSpeed = COMMAND;
+                CreateTrainsSable.LOGGER.info("CTS DEBUG scenario=entry built train {} trains={}",
+                        train.id, Create.RAILWAYS.trains.size());
             } catch (RuntimeException | LinkageError e) {
                 fail("train: " + e);
                 finished = true;
@@ -880,6 +882,10 @@ public final class SelfTest {
         void step() {
             if (rig == null) {
                 return;
+            }
+            if (ticks <= BRIDGE_AT - 1) {
+                log("trains=" + Create.RAILWAYS.trains.size()
+                        + " ours=" + Create.RAILWAYS.trains.containsValue(train));
             }
             if (ticks == BRIDGE_AT) {
                 first = BridgeTool.toggle(level, rig.clickedPos(), null);

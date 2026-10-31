@@ -74,12 +74,14 @@ public final class WheelRail {
      * @param truckCount   trucks on the vehicle, for sharing the weight
      * @param drivenCount  driven trucks on the vehicle, for sharing the demand
      * @param mass         mass of the whole vehicle, in kpg
+     * @param gravity      gravity of the dimension the vehicle is in, in m/s^2
      * @param secondsSinceAssembly how long ago the vehicle was assembled, for the attach window
      */
     @SuppressWarnings("checkstyle:ParameterNumber")
     public static Output solve(RailFrame track, Vec axle, Vec velocity, Vec forward, Vec spin,
                                double targetSpeed, boolean driven, int truckCount, int drivenCount,
-                               double mass, double secondsSinceAssembly, TruckSettings settings) {
+                               double mass, double gravity, double secondsSinceAssembly,
+                               TruckSettings settings) {
         if (track == null) {
             return IDLE;
         }
@@ -109,9 +111,11 @@ public final class WheelRail {
         // 1. Hold the axle on the rail, and carry this axle's share of the vehicle's weight.
         double lateralAcceleration = -settings.guideStiffness() * lateralError
                 - settings.guideDamping() * lateralSpeed;
+        // The engine already pulls the vehicle down; the rail has to carry it, or the vehicle
+        // would sink through the track.
         double verticalAcceleration = -settings.guideStiffness() * verticalError
                 - settings.guideDamping() * verticalSpeed
-                + settings.gravity() / Math.max(1, truckCount);
+                + gravity / Math.max(1, truckCount);
 
         double guide = Math.hypot(lateralAcceleration, verticalAcceleration);
         if (guide > settings.maxGuideAcceleration()) {
@@ -132,7 +136,7 @@ public final class WheelRail {
             // An idler does not pull: it only takes energy out of the vehicle.
             demand = clamp(-along * 0.8 / Math.max(1, truckCount), -settings.brake(), 0.0);
         }
-        double adhesion = settings.friction() * settings.gravity() / share;
+        double adhesion = settings.friction() * gravity / share;
         demand = clamp(demand, -Math.min(settings.brake(), adhesion),
                 Math.min(settings.traction(), adhesion));
 

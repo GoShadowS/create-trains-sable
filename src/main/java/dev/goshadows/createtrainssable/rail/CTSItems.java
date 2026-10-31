@@ -22,6 +22,10 @@ public final class CTSItems {
     public static final DeferredItem<BlockItem> SPRING_COUPLING = ITEMS.register("spring_coupling",
             () -> new BlockItem(CTSBlocks.SPRING_COUPLING.get(), new Item.Properties()));
 
+    /** Turns a built vehicle into a Sable sub-level. */
+    public static final DeferredItem<AssemblyToolItem> ASSEMBLY_TOOL = ITEMS.register("assembly_tool",
+            () -> new AssemblyToolItem(new Item.Properties().stacksTo(1).durability(64)));
+
     private CTSItems() {
     }
 

@@ -22,6 +22,7 @@ public final class CTSCreativeTab {
                         output.accept(CTSItems.TRACTION_TRUCK.get());
                         output.accept(CTSItems.ROLLING_TRUCK.get());
                         output.accept(CTSItems.SPRING_COUPLING.get());
+                        output.accept(CTSItems.ASSEMBLY_TOOL.get());
                     })
                     .build());
 

@@ -85,9 +85,63 @@ points, the signals, the stations, the schedule and the train screen - and no ph
   body in the world is the carriage, and a contraption drawn on top of it would be a second copy of
   the same vehicle.
 
+### What a bridged carriage does not have
+
+Suppressing the contraption entity is not free, and the cost has to be stated plainly rather than
+phrased as "passengers stay on the contraption side". A bridged carriage has **no contraption in the
+world at all** - there is no seat to sit on, no inventory to open and no entity to carry. What
+survives is data on the `Carriage` object: `TrainCargoManager` for the cargo of the carriage and
+`serialisedPassengers` for the list of riders. Nothing reads them while the carriage is bridged, and
+nothing creates something to read them.
+
+So **passengers and cargo are disabled functionality in 0.3.x**, not relocated functionality. A
+player who boards a bridged carriage has no carriage to board; the baggage of a train inventory is
+not rendered and not accessible. Carrying riders into the physical body (`pushEntityLocal`) is phase
+C, and until it exists a bridged train is a freight-only, empty-vehicle feature.
+
+### What phase A did not close, and why
+
+The acceptance criteria agreed for phase A were: the train is visible in Create's train interface, a
+station brakes it to a stop, and a red signal stops it. **Only the first is measured, and only at the
+data level**: the harness asserts that the train is in `Create.RAILWAYS.trains`, which is the map the
+train screen and the train HUD read (`in_railway_manager=true`). No rendering is measured on a
+dedicated server, and no station or signal behaviour is exercised at all.
+
+That is a real gap, not a wording problem:
+
+- **A station needs a conductor.** `Navigation.tick` cancels navigation when the train has no
+  conductor ahead of it, and `hasForwardConductor()` reads `Carriage.presentConductors`, which is set
+  from the entities inside the contraption. A bridged carriage has no contraption, so it has no
+  conductor, so Create's own navigation refuses to drive it to a station. The harness cannot fake
+  that honestly for a player-visible result.
+- **A red signal needs navigation as well.** The signal listener that sets the speed to zero is only
+  armed while `Navigation` is waiting for a signal, and `Navigation` only runs with a destination - a
+  station. No station, no signal test.
+- **A station edge point needs a station block entity.** The test would have to build a real
+  `StationBlockEntity` and register it in `Create.RAILWAYS`, which is a world-building problem, not a
+  physics one, and the harness builds its rails by node rather than by block.
+
+Conclusion: **phase A is a partial pass against its own criteria.** The bridge is measured and holds;
+the station and signal criteria are open and are listed as open rather than presented as done. The
+next phase that touches the train loop is where they get closed, with scenarios `station` and
+`signal`, and with a conductor path that does not depend on a contraption entity.
+
 Today the bridge has no in-game entry point: a train is bridged by code (`TrainBridge.bridge`) or by
-the harness. Turning a carriage's own contraption into a body, and giving a player a tool to ask for
-it, is the next step and is not claimed here.
+the harness. That entry point is the first item of phase B, because a player has to be able to bridge
+a train by hand before multi-carriage work can be judged in the world at all.
+
+## What comes next
+
+Not implemented; listed so the roadmap is not a guess.
+
+- **B, first item - the in-game entry point.** The debug assembly tool gains the action "bridge this
+  train to that body", so a player can bridge and unbridge a train by hand without a command.
+- **B, rest - more than one carriage.** Several bodies, one train, the spring couplings deciding who
+  pulls whom, and `stress` treated as deformation instead of a number to clamp.
+- **C - riders.** Passengers and cargo moved into the physical body with `pushEntityLocal`, and the
+  `CarriageContraptionEntity` finally out of the picture for good.
+- **D - derailment in the train.** A body that leaves the rail puts the train into `Train.derailed`
+  and `TrainStatus`, with the station and signal scenarios above closed as part of that work.
 
 ## Configuration
 
@@ -208,6 +262,11 @@ measurement from play.
 - **One carriage per body.** `TrainBridge.bridge` refuses a train with more than one carriage: the
   couplings between bodies have to decide who pulls whom, and the spring coupling model is not wired
   into the train loop yet. A multi-carriage train stays a Create contraption.
+- **No passengers, no cargo while bridged.** A bridged carriage has no contraption entity, so there
+  is nothing to ride in and nothing to open. See "What a bridged carriage does not have" above.
+- **No station stops and no signal stops while bridged.** Create's navigation needs a conductor from
+  the contraption and a station edge point; neither exists for a bridged carriage yet, so a bridged
+  train can be driven with its controls but cannot run a schedule to a station.
 - **One contact point per axle.** There is no wheel lift, no axle load transfer and no per-wheel
   slip curve; tight S-bends are where this shows first.
 - **Couplings do not transmit torque or bend.** They pull and push along one line, which is what a

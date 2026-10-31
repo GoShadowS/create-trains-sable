@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.3.1 - phase A said what it did not do
+
+### Why this version exists
+
+0.3.0 shipped the bridge and reported it as done. It was not done against its own acceptance
+criteria: the plan for phase A asked for a train visible in Create's train interface, a station that
+brakes it and a red signal that stops it, and the release only measured that a train accelerates,
+travels the distance its body travelled, and keeps its carriage over its axle. The station and the
+signal were never exercised, and 0.3.0 did not say so.
+
+This version does not add behaviour. It records the gap, measures the one part of the criterion that
+can be measured headless, and corrects a sentence that was wrong.
+
+### Fixed, in the documentation
+
+- **"Passengers and cargo stay on the contraption side" was incorrect.** A bridged carriage suppresses
+  its `CarriageContraptionEntity`, so there is no contraption in the world at all: no seat, no
+  inventory, no entity. Only disconnected data survives on the `Carriage` (`TrainCargoManager`,
+  `serialisedPassengers`), and nothing creates anything that could read it. Passengers and cargo are
+  **disabled while a carriage is bridged**, not relocated, and the README now says exactly that.
+- **Phase A is recorded as a partial pass.** `README.md` has a section on what phase A did not close
+  and why: `Navigation.tick` cancels when the train has no conductor, `hasForwardConductor()` reads
+  `presentConductors` which is filled from contraption entities, a bridged carriage has none, and the
+  signal listener is only armed while navigation waits for a signal. A station stop cannot be faked
+  headless without measuring something other than what a player would experience.
+
+### Added
+
+- The `bridge` scenario reports `in_railway_manager`, the registration that Create's train screen and
+  HUD read. It is data-level visibility on a dedicated server, and it is labelled as such rather
+  than as a rendering test.
+
+### Measured
+
+```
+bridge PASS carriages=1 target=1.600 speed=1.424 travelled_body=14.234 travelled_train=14.234
+            drift=0.000 lateral_max=0.000 anchor_gap=0.011 ordered=1.600 peak=1.424 rise_ticks=34
+            in_railway_manager=true
+```
+
+### The road, not a promise
+
+The in-game entry point for the bridge - the debug assembly tool gaining "bridge this train to that
+body" - is the first item of phase B, because a player has to be able to activate the bridge by hand
+before multi-carriage behaviour can be judged in the world. Station and signal scenarios belong to
+phase D, which is where the train loop is touched again.
+
+
 ## 0.3.0 - a Create train rides a body
 
 ### What this version adds

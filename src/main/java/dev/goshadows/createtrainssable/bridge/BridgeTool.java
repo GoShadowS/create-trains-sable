@@ -122,6 +122,35 @@ public final class BridgeTool {
     }
 
     /**
+     * What the search saw, for the message a player gets and for the harness log.
+     *
+     * <p>Written as counts and the nearest horizontal distance rather than as a list of ids: when a
+     * player reports "it says no train", the log has to say whether there was no train at all, or a
+     * train that was rejected and by how far.</p>
+     */
+    private static String describeTrains(ServerLevel level, ServerSubLevel body) {
+        Vec centre = TrainBridge.centre(body);
+        int total = Create.RAILWAYS.trains.size();
+        int usable = 0;
+        double nearest = Double.MAX_VALUE;
+        for (Train train : Create.RAILWAYS.trains.values()) {
+            if (train.invalid || train.graph == null || TrainBridge.isBridged(train)) {
+                continue;
+            }
+            usable++;
+            Vec3 anchor = leadingAnchor(train);
+            if (anchor == null) {
+                continue;
+            }
+            nearest = Math.min(nearest, Math.sqrt(Math.pow(anchor.x - centre.x(), 2)
+                    + Math.pow(anchor.z - centre.z(), 2)));
+        }
+        String distance = nearest == Double.MAX_VALUE ? "none has an anchor"
+                : String.format(java.util.Locale.ROOT, "%.1f blocks", nearest);
+        return "trains=" + total + ", usable=" + usable + ", nearest=" + distance;
+    }
+
+    /**
      * The sub-level the clicked block belongs to, or {@code null} when it belongs to none.
      *
      * <p>An assembled vehicle has no blocks in the world: they live in the plot, at plot

@@ -6,6 +6,8 @@ import dev.goshadows.createtrainssable.rail.CTSBlockEntities;
 import dev.goshadows.createtrainssable.rail.CTSBlocks;
 import dev.goshadows.createtrainssable.rail.CTSCreativeTab;
 import dev.goshadows.createtrainssable.rail.CTSItems;
+import dev.goshadows.createtrainssable.selftest.SelfTest;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -32,6 +34,12 @@ public final class CreateTrainsSable {
         CTSItems.register(modBus);
         CTSCreativeTab.register(modBus);
         modContainer.registerConfig(ModConfig.Type.SERVER, CTSConfig.SPEC, MOD_ID + "-server.toml");
+        if (Boolean.getBoolean(SelfTest.ENABLED_PROPERTY)) {
+            // Only the physics harness asks for this; a normal game never registers the listeners.
+            NeoForge.EVENT_BUS.addListener(SelfTest::onServerStarted);
+            NeoForge.EVENT_BUS.addListener(SelfTest::onServerTick);
+            LOGGER.info("Create Trains Sable: physics self-test armed");
+        }
         LOGGER.info("Create Trains Sable: rail contact ready; trucks drive their own body");
     }
 }

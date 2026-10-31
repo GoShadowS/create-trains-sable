@@ -100,18 +100,46 @@ maxAcceleration = 14.0
 
 ## What is verified, and what is not
 
-Verified on every push, by the workflow in `.github/workflows/build.yml`:
+Three things run on every push, in this order, and each has to pass:
 
-- the mod compiles (Gradle, Java 21, NeoForge 1.21.1);
-- the rail-contact arithmetic passes its unit tests - 12 cases covering holding the rail, leaving
-  it past the flange, the attach window, overspeed on a curve, the adhesion cap, weight and grip
-  sharing between axles, and the steering correction;
-- a dedicated server starts, loads the mod and reaches `Done (`.
+1. **`./gradlew build`** - the mod compiles, and the rail-contact arithmetic passes 12 unit tests
+   (holding the rail, leaving it past the flange, the attach window, overspeed on a curve, the
+   adhesion cap, weight and grip sharing between axles, the steering correction).
+2. **`./gradlew runSelfTest`** - the physics session described below. A dedicated server builds a
+   vehicle by code, lets the engine drive it, and prints what happened.
+3. **`./gradlew runServer`** - a dedicated server loads the mod and reaches `Done (`.
 
-**Not verified:** nothing in this repository has been driven in a world with a player. The feel -
-acceleration, brake distances, how tight a curve can be taken, whether the trucks sit where the
-build expects - is untuned, and every number in the configuration section is an estimate from
-physics, not a measurement from play. Treat the mod as a working mechanism, not a finished ride.
+### The physics self-test
+
+`./gradlew runSelfTest` starts a dedicated server with `-Dcts.selftest=true`. The harness
+(`selftest/`) places a five by three deck with a traction and a rolling truck under it, registers a
+straight rail in Create's own track graph, assembles the whole thing into a Sable sub-level, and
+then measures it over several hundred ticks:
+
+| Scenario | What it proves | Reported numbers |
+| --- | --- | --- |
+| `assembly` | the structure becomes a body, and its axles find the rail | blocks, trucks, mass, per-axle state |
+| `guide` | a sideways push is absorbed by the flange and the vehicle settles | worst and final lateral error, vertical offset, speed |
+| `traction` | 32 RPM really moves the vehicle at 1.6 m/s | speed, distance travelled, states |
+| `derail` | a 6 m/s sideways push leaves the rail, keeps momentum and falls | speed after the push, height lost, states |
+
+Each scenario prints one line of numbers and the run ends with
+`CTS SELFTEST SUMMARY scenarios=4 passed=4 failed=0`; the CI job fails unless that line says
+`failed=0`.
+
+Two honest limitations of the harness:
+
+- **the rail is synthesised**, not built from track blocks: a two-node `TrackGraph` with a straight
+  `TrackEdge`. The contact sees exactly the same thing it would see on a placed straight track, but
+  switches, curves and slopes are not covered by it yet;
+- **the shaft speed is forced** (`TruckBlockEntity.selfTestSpeed`), because a scripted server has
+  no kinetic network to take rotation from. The block's force output and the physics are real; only
+  the RPM it reads is set by the test.
+
+**Not verified:** nothing here has been driven in a world with a player. The feel - acceleration,
+brake distances, how tight a curve can be taken, whether the trucks sit where the build expects -
+is untuned, and every number in the configuration section is an estimate from physics, not a
+measurement from play.
 
 ## Known limitations
 

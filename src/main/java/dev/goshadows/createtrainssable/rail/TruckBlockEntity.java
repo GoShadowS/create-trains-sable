@@ -45,6 +45,8 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     private double lastSpeed;
     private double lastLateralError;
     private WheelRail.State loggedState = WheelRail.State.NO_TRACK;
+    /** Shaft speed forced by the physics harness; {@code null} in a normal game. */
+    private Float forcedSpeed;
 
     public TruckBlockEntity(BlockPos pos, BlockState state) {
         super(CTSBlockEntities.TRUCK.get(), pos, state);
@@ -114,8 +116,9 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         int trucks = countTrucks(subLevel, false);
         int driven = countTrucks(subLevel, true);
         double mass = vehicleMass(subLevel);
+        float shaftSpeed = forcedSpeed != null ? forcedSpeed : getSpeed();
         double target = isDriven()
-                ? WheelRail.targetSpeed(getSpeed(), facingSign(), settings)
+                ? WheelRail.targetSpeed(shaftSpeed, facingSign(), settings)
                 : 0.0;
 
         WheelRail.Output output = WheelRail.solve(track, axle, velocity, forward(subLevel), spin,
@@ -227,6 +230,17 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
                     "Truck {} is too fast for the curve: speed={}, at {}", worldPosition,
                     String.format("%.2f", lastSpeed), lastAxle);
         }
+    }
+
+    /**
+     * Forces the shaft speed, for the physics harness only.
+     *
+     * <p>A dedicated server built by a script has no kinetic network to take rotation from, so the
+     * harness sets the speed the truck would otherwise read from its shaft. Nothing in a normal
+     * game calls this, and {@code null} restores the real shaft.</p>
+     */
+    public void selfTestSpeed(Float rpm) {
+        this.forcedSpeed = rpm;
     }
 
     /** Current contact state of this axle; used by diagnostics and by tests. */

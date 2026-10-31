@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.2.2 - a physics harness, and the direction of 0.2.0 called what it was
+
+### Why the next version changes direction again
+
+0.2.0 replaced the mod's connection to Create's trains with a vehicle of its own. The reasoning was
+recorded as "integration with a Create train is not possible", and that was wrong. The failure of
+0.1 had exactly one cause: the body was teleported after a `CarriageContraptionEntity` that Create
+moves itself, so the physics engine never owned the motion. The correct conclusion was "do not
+teleport the body", not "do not touch the train". This changelog does not present that turn as the
+plan from the start: it was a wrong inference, and the mod is being rebuilt on Create's own
+`Train`, `Carriage` and `CarriageContraption` from 0.3.0.
+
+### Added
+
+- **A physics harness that runs on a dedicated server** (`./gradlew runSelfTest`, property
+  `cts.selftest=true`). Four scenarios - `assembly`, `guide`, `traction`, `derail` - build a
+  vehicle, drive it on a straight rail and print measurements: mass, lateral and vertical error,
+  speed, distance travelled, and the state of every axle. The run ends with
+  `CTS SELFTEST SUMMARY scenarios=4 passed=4 failed=0`.
+- A `selftest` job in CI. It fails if the summary is missing or reports a failure, so "the server
+  started" is no longer accepted as evidence that the mod works.
+- `TruckBlockEntity.selfTestSpeed`, so the harness can give a truck a shaft speed on a server with
+  no kinetic network.
+
+### Known limits of the harness
+
+- The rail is a synthetic two-node `TrackGraph` with a straight edge: no switches, curves or
+  slopes.
+- The shaft speed is set by the test rather than read from a kinetic network.
+
 ## 0.2.1 - fixes found by reading the rebuilt code
 
 0.2.0 built and booted, so the next pass went through the arithmetic and the pipeline instead.

@@ -19,7 +19,7 @@ class TuningTest {
                 new Tuning.General(true, null, 0, 1),
                 new Tuning.Traction(Double.NaN, -5.0, 0.0, -1.0, 100.0, 0.0, Double.POSITIVE_INFINITY),
                 new Tuning.Derailment(-1.0, 0.0, 0.0, 0.0, -2.0, 0.5, -1.0, -3.0),
-                new Tuning.Rebinding(-1.0, -1.0, -1.0, -1.0, 0),
+                new Tuning.Rebinding(-1.0, -1.0, -1.0, -1.0, 0, true),
                 new Tuning.Debug(false));
 
         Tuning fixed = broken.validated();

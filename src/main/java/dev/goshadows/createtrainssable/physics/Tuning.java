@@ -32,7 +32,7 @@ public record Tuning(General general, Traction traction, Derailment derailment,
     }
 
     public record Rebinding(double maxSpeed, double maxAngularSpeed, double maxTiltDegrees,
-                            double maxTrackDistance, int stableTicks) {
+                            double maxTrackDistance, int stableTicks, boolean autoResync) {
     }
 
     public record Debug(boolean showRapierHitboxes) {
@@ -43,7 +43,7 @@ public record Tuning(General general, Traction traction, Derailment derailment,
                 new General(true, ConversionMode.THRESHOLD, 10, 12000),
                 new Traction(0.5, 0.1, 0.45, 0.02, 1.0, 0.18, 9.81),
                 new Derailment(1.8, 0.45, 0.75, 1.1, 64.0, 1.15, 4.0, 18.0),
-                new Rebinding(0.25, 0.10, 12.0, 1.5, 40),
+                new Rebinding(0.25, 0.10, 12.0, 1.5, 40, false),
                 new Debug(false));
     }
 
@@ -79,7 +79,8 @@ public record Tuning(General general, Traction traction, Derailment derailment,
                 clamp(rebinding.maxAngularSpeed(), 0.0, 10.0),
                 clamp(rebinding.maxTiltDegrees(), 0.0, 180.0),
                 clamp(rebinding.maxTrackDistance(), 0.0, 32.0),
-                (int) clamp(rebinding.stableTicks(), 1, 1000));
+                (int) clamp(rebinding.stableTicks(), 1, 1000),
+                rebinding.autoResync());
 
         return new Tuning(g, t, d, r, new Debug(debug.showRapierHitboxes()));
     }

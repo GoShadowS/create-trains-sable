@@ -54,8 +54,10 @@ public final class TrainStructure {
 
     public enum Outcome {
         ACTIVE,
+        /** The train came back onto a graph; the caller re-adopts it as a tracked structure. */
         RESYNCED,
-        ABANDONED
+        /** The train or its carriages are gone; the structure has been released. */
+        LOST
     }
 
     private record Part(Carriage carriage, AttachedBody body, Point3 offset) {
@@ -64,13 +66,14 @@ public final class TrainStructure {
     private final UUID trainId;
     private final ResourceKey<Level> dimension;
     private final List<Part> parts;
-    private final TrainStateSnapshot snapshot;
+    private TrainStateSnapshot snapshot;
     private final ResyncEvaluator evaluator = new ResyncEvaluator();
     private Mode mode = Mode.TRACKED;
     private DerailmentModel.Trigger trigger = DerailmentModel.Trigger.NONE;
     private double initialSpeed;
     private int ageTicks;
     private boolean released;
+    private boolean resyncGivenUp;
 
     private TrainStructure(ServerLevel level, UUID trainId, TrainStateSnapshot snapshot,
                            List<Part> parts) {
@@ -171,30 +174,47 @@ public final class TrainStructure {
     }
 
     public Outcome tick(ServerLevel level, Tuning tuning) {
+        // A disassembled train is no longer in the railway manager, and its carriage entities are
+        // gone. Keeping the sub-levels would leave a duplicate of a train that no longer exists.
+        if (!Create.RAILWAYS.trains.containsKey(trainId)) {
+            release(ReleaseReason.ABANDON);
+            return Outcome.LOST;
+        }
         ageTicks++;
+        // Create respawns carriage entities when their chunks reload, in every mode. They must
+        // stay hidden or the player sees the contraption and the sub-level on top of each other.
+        hideEntities();
         if (mode == Mode.TRACKED) {
-            follow(level, tuning);
-            return Outcome.ACTIVE;
+            return follow(level, tuning);
         }
         return tickFree(level, tuning);
     }
 
     /** Kinematic follow: the sub-levels are put back onto the carriages Create is moving. */
-    private void follow(ServerLevel level, Tuning tuning) {
+    private Outcome follow(ServerLevel level, Tuning tuning) {
+        int present = 0;
         for (Part part : parts) {
             if (!part.body().isValid()) {
                 continue;
             }
             CarriageFrame frame = CarriageFrame.of(part.carriage());
+            if (frame == null) {
+                // Never follow a missing carriage with a default frame: that puts the structure
+                // at the world origin and looks like the train teleporting away.
+                continue;
+            }
+            present++;
             Point3 target = frame.anchor().add(frame.orientation().rotate(part.offset()));
             part.body().follow(new Pose(target, frame.orientation(), Point3.ZERO, Point3.ZERO));
         }
-        // Create respawns carriage entities when their chunks reload; they must stay hidden or
-        // the player would see the contraption and the sub-level on top of each other.
-        hideEntities();
+        if (present == 0) {
+            release(ReleaseReason.ABANDON);
+            return Outcome.LOST;
+        }
         if (tuning.debug().showRapierHitboxes() && ageTicks % 20 == 0) {
             RapierDebug.logBodies(trainId, bodies(), ageTicks);
         }
+        return Outcome.ACTIVE;
     }
 
     /** Stops following the train and gives Rapier the momentum it had when it left the rails. */
@@ -208,6 +228,12 @@ public final class TrainStructure {
         Point3 velocity = train != null ? velocityOf(train, speedMetresPerSecond) : Point3.ZERO;
 
         if (train != null) {
+            // The graph is still attached here; capture where the train actually is now, not
+            // where it was when it was adopted, or a later resync snaps it back to that place.
+            TrainStateSnapshot fresh = TrainStateSnapshot.capture(train).orElse(null);
+            if (fresh != null) {
+                this.snapshot = fresh;
+            }
             // The crash mixin would otherwise queue this train again on the next tick.
             CrashSignals.beginConversion(trainId);
             try {
@@ -234,30 +260,35 @@ public final class TrainStructure {
         List<AttachedBody> valid = bodies().stream().filter(AttachedBody::isValid).toList();
         if (valid.isEmpty()) {
             release(ReleaseReason.ABANDON);
-            return Outcome.ABANDONED;
+            return Outcome.LOST;
         }
 
         Pose pose = valid.get(0).samplePose();
-        double trackDistance = TrackRebinder.distanceToNearestTrack(level, pose.position());
-        evaluator.observe(pose, trackDistance, tuning);
 
         if (tuning.debug().showRapierHitboxes() && ageTicks % 20 == 0) {
             RapierDebug.logBodies(trainId, valid, ageTicks);
         }
 
-        if (evaluator.isReady(tuning)) {
-            Train train = Create.RAILWAYS.trains.get(trainId);
-            if (train != null && snapshot != null
-                    && TrackRebinder.rebind(level, train, snapshot, pose.position(), tuning)) {
-                release(ReleaseReason.RESYNC);
-                return Outcome.RESYNCED;
+        // A wreck is a finished Sable structure. Only put it back on a track when the server owner
+        // asked for that, and never yank it away from where it fell.
+        if (tuning.rebinding().autoResync() && !resyncGivenUp) {
+            double trackDistance = TrackRebinder.distanceToNearestTrack(level, pose.position());
+            evaluator.observe(pose, trackDistance, tuning);
+            if (evaluator.isReady(tuning)) {
+                Train train = Create.RAILWAYS.trains.get(trainId);
+                if (train != null && snapshot != null
+                        && TrackRebinder.rebind(level, train, snapshot, pose.position(), tuning)) {
+                    release(ReleaseReason.RESYNC);
+                    return Outcome.RESYNCED;
+                }
+                evaluator.reset();
             }
-            evaluator.reset();
-        }
-
-        if (ageTicks > tuning.general().sessionTimeoutTicks()) {
-            release(ReleaseReason.ABANDON);
-            return Outcome.ABANDONED;
+            if (ageTicks > tuning.general().sessionTimeoutTicks()) {
+                resyncGivenUp = true;
+                CreateTrainsSable.LOGGER.info(
+                        "Train {} stayed a wreck: no track within reach after {} ticks",
+                        trainId, ageTicks);
+            }
         }
         return Outcome.ACTIVE;
     }

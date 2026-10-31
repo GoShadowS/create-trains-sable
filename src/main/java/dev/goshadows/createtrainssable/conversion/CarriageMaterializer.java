@@ -121,6 +121,9 @@ public final class CarriageMaterializer {
     /** Pose of a carriage as Create is currently drawing it, with the given linear velocity. */
     public static Pose carriagePose(Carriage carriage, Train train, double speedMetresPerSecond) {
         CarriageFrame frame = CarriageFrame.of(carriage);
+        if (frame == null) {
+            frame = CarriageFrame.IDENTITY;
+        }
         Vec3 direction = carriage.getLeadingPoint().edge != null
                 ? carriage.getLeadingPoint().edge.getDirection(true) : new Vec3(1.0, 0.0, 0.0);
         if (train != null && train.speed < 0.0) {

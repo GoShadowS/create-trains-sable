@@ -17,10 +17,14 @@ public record CarriageFrame(Point3 anchor, Quat orientation) {
 
     public static final CarriageFrame IDENTITY = new CarriageFrame(Point3.ZERO, Quat.IDENTITY);
 
+    /**
+     * @return the carriage frame, or {@code null} when Create has no present entity for it -
+     *         the carriage is unloaded, or the train was disassembled.
+     */
     public static CarriageFrame of(Carriage carriage) {
         CarriageContraptionEntity entity = carriage.anyAvailableEntity();
         if (entity == null) {
-            return IDENTITY;
+            return null;
         }
         Vec3 anchor = entity.getAnchorVec();
         Vec3 x = entity.applyRotation(new Vec3(1.0, 0.0, 0.0), 1.0f);

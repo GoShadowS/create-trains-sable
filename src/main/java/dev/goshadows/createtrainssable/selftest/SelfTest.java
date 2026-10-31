@@ -162,7 +162,7 @@ public final class SelfTest {
 
         final String name;
         private final int budget;
-        private final int z;
+        final int z;
 
         ServerLevel level;
         TestRig rig;
@@ -609,6 +609,7 @@ public final class SelfTest {
         private static final double TARGET_METRES_PER_SECOND = COMMAND * CarriageBody.TICKS_PER_SECOND;
 
         private Train train;
+        private TrainBridge.Bridge bridge;
         private BridgedCarriage bridged;
         private double startCentre;
         private double travelledBody;
@@ -656,7 +657,8 @@ public final class SelfTest {
                     new ArrayList<>(List.of(carriage)), new ArrayList<>(), true, 0);
             train.targetSpeed = COMMAND;
             Create.RAILWAYS.addTrain(train);
-            bridged = TrainBridge.bridge(train, rig.body);
+            bridge = TrainBridge.bridge(train, rig.body);
+            bridged = bridge.carriages().getFirst();
             startCentre = rig.centre().x();
         }
 
@@ -701,7 +703,7 @@ public final class SelfTest {
                 fail("the train is no longer in Create's railway manager");
                 return;
             }
-            if (TrainBridge.bridged(train) != bridged || train.carriages.size() != 1) {
+            if (TrainBridge.bridged(train) != bridge || train.carriages.size() != 1) {
                 fail("the train no longer carries the bridged carriage");
                 return;
             }
@@ -797,6 +799,7 @@ public final class SelfTest {
                 train.invalid = true;
                 train = null;
             }
+            bridge = null;
             bridged = null;
             super.cleanup();
         }

@@ -110,6 +110,68 @@ class WheelRailTest {
     }
 
     @Test
+    void everyAxleCarriesAnEqualShareOfTheWeight() {
+        // Each axle reports the force it must apply; the sum over the vehicle is what holds it up.
+        double mass = 400.0;
+        for (int trucks : new int[] {1, 2, 4, 6}) {
+            WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
+                    new Vec(1, 0, 0), Vec.ZERO, 0.0, false, trucks, 0, mass, SETTINGS.gravity(),
+                    10.0, SETTINGS);
+            double expected = mass * SETTINGS.gravity();
+            assertEquals(expected, output.force().y() * trucks, expected * 1.0e-6,
+                    trucks + " axles must carry the weight between them, not once each");
+        }
+    }
+
+    @Test
+    void gripIsTheSameOnOneAxleAsOnSix() {
+        // A wheel grips in proportion to the weight it carries and the mass it pushes; both are
+        // shared by the axle count, so the acceleration the vehicle can reach is not.
+        double mass = 1000.0;
+        double expected = mass * Math.min(SETTINGS.traction(), SETTINGS.friction() * SETTINGS.gravity());
+        for (int driven : new int[] {1, 2, 4}) {
+            WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
+                    new Vec(1, 0, 0), Vec.ZERO, 30.0, true, driven, driven, mass,
+                    SETTINGS.gravity(), 10.0, SETTINGS);
+            assertEquals(expected, output.force().x() * driven, expected * 1.0e-6,
+                    "traction must not depend on how many axles are driven");
+        }
+    }
+
+    @Test
+    void rollingResistanceIsAPropertyOfTheVehicle() {
+        double mass = 600.0;
+        double totalOne = 0.0;
+        double totalFour = 0.0;
+        int trucks = 1;
+        for (int pass = 0; pass < 2; pass++) {
+            WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO,
+                    new Vec(5, 0, 0), new Vec(1, 0, 0), Vec.ZERO, 0.0, false, trucks, 0, mass,
+                    SETTINGS.gravity(), 10.0, SETTINGS);
+            if (pass == 0) {
+                totalOne = output.force().x();
+                trucks = 4;
+            } else {
+                totalFour = output.force().x() * 4;
+            }
+        }
+        assertEquals(totalOne, totalFour, Math.abs(totalOne) * 1.0e-6,
+                "an idler must slow the vehicle by the same amount however many idlers there are");
+        assertTrue(totalOne < 0.0, "an idler only ever takes energy out of the vehicle");
+    }
+
+    @Test
+    void steeringIsSharedBetweenAxles() {
+        Vec forward = new Vec(0, 0, 1);
+        double one = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO, forward, Vec.ZERO, 0.0,
+                false, 1, 0, 100.0, SETTINGS.gravity(), 10.0, SETTINGS).angularAcceleration().length();
+        double four = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO, forward, Vec.ZERO, 0.0,
+                false, 4, 0, 100.0, SETTINGS.gravity(), 10.0, SETTINGS)
+                .angularAcceleration().length() * 4.0;
+        assertEquals(one, four, one * 1.0e-6, "four axles must turn the body once, not four times");
+    }
+
+    @Test
     void targetSpeedFollowsTheShaftAndTheFacing() {
         assertEquals(1.6, WheelRail.targetSpeed(32.0f, 1.0, SETTINGS), 1.0e-9);
         assertEquals(-1.6, WheelRail.targetSpeed(32.0f, -1.0, SETTINGS), 1.0e-9);

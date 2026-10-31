@@ -73,7 +73,7 @@ public final class WheelRail {
      * @param driven       true for a traction truck
      * @param truckCount   trucks on the vehicle, for sharing the weight
      * @param drivenCount  driven trucks on the vehicle, for sharing the demand
-     * @param mass         mass of the whole vehicle, in kpg
+     * @param mass         mass of the whole vehicle, in Sable's mass units
      * @param gravity      gravity of the dimension the vehicle is in, in m/s^2
      * @param secondsSinceAssembly how long ago the vehicle was assembled, for the attach window
      */
@@ -108,14 +108,17 @@ public final class WheelRail {
                     targetSpeed - along);
         }
 
-        // 1. Hold the axle on the rail, and carry this axle's share of the vehicle's weight.
+        // Every value below is an acceleration of the *whole* vehicle; turning it into a force for
+        // one axle happens once, at `forceScale`, so nothing is shared twice.
+        //
+        // 1. Hold the axle on the rail, and carry the weight. The engine already pulls the vehicle
+        // down with the gravity of the dimension, so the rail has to give exactly that back: one g,
+        // not one g per truck. The spring is per axle, so it is not divided either.
         double lateralAcceleration = -settings.guideStiffness() * lateralError
                 - settings.guideDamping() * lateralSpeed;
-        // The engine already pulls the vehicle down; the rail has to carry it, or the vehicle
-        // would sink through the track.
         double verticalAcceleration = -settings.guideStiffness() * verticalError
                 - settings.guideDamping() * verticalSpeed
-                + gravity / Math.max(1, truckCount);
+                + gravity;
 
         double guide = Math.hypot(lateralAcceleration, verticalAcceleration);
         if (guide > settings.maxGuideAcceleration()) {
@@ -128,23 +131,25 @@ public final class WheelRail {
 
         // 2. Traction along the rail, capped by what the wheel can actually transmit.
         double demand;
-        int share = driven ? Math.max(1, drivenCount) : 1;
         if (driven) {
-            demand = (targetSpeed - along) * 4.0 / share;
-            demand = clamp(demand, -settings.brake(), settings.traction());
+            demand = clamp((targetSpeed - along) * 4.0, -settings.brake(), settings.traction());
         } else {
             // An idler does not pull: it only takes energy out of the vehicle.
-            demand = clamp(-along * 0.8 / Math.max(1, truckCount), -settings.brake(), 0.0);
+            demand = clamp(-along * 0.8, -settings.brake(), 0.0);
         }
-        double adhesion = settings.friction() * gravity / share;
+        // A wheel carries 1/truckCount of the weight, and pushes 1/truckCount of the mass, so the
+        // ratio - and with it the grip - does not depend on how many axles the vehicle has.
+        double adhesion = settings.friction() * gravity;
         demand = clamp(demand, -Math.min(settings.brake(), adhesion),
                 Math.min(settings.traction(), adhesion));
 
         double forceScale = mass / Math.max(1, driven ? drivenCount : truckCount);
         Vec force = support.add(track.tangent().scale(demand)).scale(forceScale);
 
-        // 3. Steer the body along the rail.
-        Vec angularAcceleration = alignment(forward, track.tangent(), spin, settings);
+        // 3. Steer the body along the rail. Each truck adds its own share of one correction, or a
+        // vehicle with six axles would turn six times as hard as a vehicle with one.
+        Vec angularAcceleration = alignment(forward, track.tangent(), spin, settings)
+                .scale(1.0 / Math.max(1, truckCount));
 
         return new Output(force, angularAcceleration, State.GUIDING, lateralError, verticalError,
                 targetSpeed - along);

@@ -82,12 +82,14 @@ public final class DerailmentController {
             TrainStructure.Outcome outcome = structure.tick(level, tuning);
             if (outcome == TrainStructure.Outcome.RESYNCED) {
                 structures.remove(entry.getKey());
+                monitor.forget(entry.getKey());
                 Train train = Create.RAILWAYS.trains.get(entry.getKey());
                 if (train != null) {
                     adopt(level, train, tuning, tick, "resynced");
                 }
-            } else if (outcome == TrainStructure.Outcome.ABANDONED) {
+            } else if (outcome == TrainStructure.Outcome.LOST) {
                 structures.remove(entry.getKey());
+                adoptionRetryAt.remove(entry.getKey());
                 monitor.forget(entry.getKey());
             }
         }

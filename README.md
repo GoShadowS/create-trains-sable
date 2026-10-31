@@ -1,11 +1,12 @@
 # Create Trains Sable
 
-Create Trains Sable is a Minecraft 1.21.1 add-on for NeoForge. It takes a Create
-train out of Create's kinematic movement and gives it a Sable sub-level with a
-Rapier rigid body when the train derails, crashes or exceeds a safe speed in a
-curve. Once the wreck has settled on a straight piece of track, the mod hands
-control back to Create's `TrackGraph` so stations, signals and schedules keep
-working.
+Create Trains Sable is a Minecraft 1.21.1 add-on for NeoForge. It replaces the
+object a Create train is built from: instead of a contraption entity, every
+carriage becomes a Sable sub-level with a Rapier rigid body. A train can therefore
+derail, crash, collide and be walked on like any other Sable structure. A wreck
+stays where it fell; if the server owner enables `[rebinding] autoResync`, a
+settled wreck is put back on a nearby track instead, so stations, signals and
+schedules keep working.
 
 > **Status: 0.1.0, early development.** The physics model is unit-tested; the
 > Sable integration is written against Sable 2.0.6's public API but has not yet
@@ -55,11 +56,15 @@ released to Rapier with the train's momentum, passengers are ejected, and wheel
 adhesion, rolling resistance and braking are applied as impulses on Sable's
 physics substeps. From that point the wreck moves only because Rapier says so.
 
-When a body has been quiet, upright and close to a track for long enough, the mod
-re-seeds the travelling points using Create's own `TrainMigration` and
-`TravellingPoint.migrateTo` API, restores `Train.graph`, and rebuilds the
-sub-levels at the train's new pose. If the original graph no longer resolves, the
-mod looks for a straight edge long enough to hold the whole train.
+By default the wreck simply stays where Rapier put it: it is a normal Sable
+structure, it can be walked on, pushed, broken or left in the tunnel it fell into.
+With `[rebinding] autoResync = true` a body that has been quiet, upright and close
+to a track for long enough is put back instead: the mod re-seeds the travelling
+points using Create's own `TrainMigration` and `TravellingPoint.migrateTo` API,
+restores `Train.graph`, and rebuilds the sub-levels at the wreck's pose. If the
+original graph no longer holds the train, the mod looks for the closest straight
+edge long enough to hold it - and gives up rather than teleporting the wreck
+somewhere else.
 
 ## Configuration
 
@@ -88,6 +93,7 @@ brakeForceMultiplier = 1.0
 blockMassScale = 0.5
 
 [rebinding]
+autoResync = false            # put a settled wreck back on the nearest track
 maxSpeed = 0.25               # m/s
 maxTiltDegrees = 12.0
 stableTicks = 40
@@ -107,6 +113,26 @@ through its datapack-driven `MassTracker`. This mod ships definitions under
 `data/createtrainssable/physics_block_properties/` for Create bogeys, railway
 casings and train controls; server owners can override them with a datapack.
 
+## Relationship to Create: Loconautics
+
+Create: Loconautics is an unreleased Create: Aeronautics add-on that reimplements
+Create trains as physical objects driven by Sable, with real derailments, crash
+damage and coupling. It is the closest reference for what this add-on is trying to
+be, and it is not used here in any way: no code, API or dependency is shared, and
+it is not installed or required.
+
+What this add-on implements from that idea:
+
+- a train is a Sable structure instead of a contraption;
+- a derailed train is a Rapier body with the momentum it had when it left the rails;
+- a wreck can be put back on a track instead of being lost;
+- the settings are in a server config rather than in a command.
+
+What is still missing compared with it: trains that are *fully* physical while they
+run (this mod still lets Create steer the route and moves the sub-level onto the
+carriage every tick), per-train opt-out of the structure mode, block placement on
+an assembled train, and physical coupling between carriages.
+
 ## Known Issues / Limitations
 
 - **Not yet validated in a live game.** The source is written against
@@ -118,16 +144,23 @@ casings and train controls; server owners can override them with a datapack.
 - **Sable's API is not semver-stable.** Types such as `ServerSubLevel`,
   `RigidBodyHandle` and `SubLevelAssemblyHelper` may move between Sable releases.
   A new Sable version can require an update here.
-- **Rebinding is conservative.** It needs the original graph to still resolve the
-  old travelling points, or a straight edge long enough for the whole train,
-  within `maxTrackDistance`. A wreck in a tunnel, on a curve, or far from any
-  track stays a wreck. After `sessionTimeoutTicks` the physics body is removed
-  and Create keeps the train in its derailed state.
+- **Rebinding is off by default and conservative.** When enabled it needs the
+  original graph to still resolve the travelling points near the wreck, or a
+  straight edge long enough for the whole train within `maxTrackDistance`. A wreck
+  in a tunnel, on a curve, or far from any track stays a wreck. After
+  `sessionTimeoutTicks` the mod stops trying; the body is never removed behind the
+  player's back.
 - **Conversion needs clear space.** Blocks are only materialised into air. A train
   that derails inside terrain produces a partial wreck, and changes made to the
   wreck's block entities are not merged back into the contraption on resync.
 - **Passengers are ejected** when a train derails. While it runs normally they stay
   on the hidden contraption entity, so they are not pushed by the sub-level.
+- **A running train is steered, not simulated.** Create still decides the route and
+  the sub-level is moved onto the carriage, so Sable collisions cannot push a
+  moving train off its track. Only the derailment itself is a real simulation.
+- **The carriage entity is hidden on purpose.** Its renderer and its entity
+  collisions are suppressed while the structure exists, because otherwise the train
+  would be drawn and would push players twice.
 - **Orientation at hand-off is upright.** The materialised blocks snap to the
   voxel grid, so a train that was pitched on a slope starts its rigid-body life
   axis-aligned. Rapier takes over rotation from there.

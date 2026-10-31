@@ -35,6 +35,7 @@ public final class CTSConfig {
     private static final ModConfigSpec.DoubleValue RESYNC_MAX_TILT;
     private static final ModConfigSpec.DoubleValue RESYNC_MAX_TRACK_DISTANCE;
     private static final ModConfigSpec.IntValue RESYNC_STABLE_TICKS;
+    private static final ModConfigSpec.BooleanValue AUTO_RESYNC;
 
     private static final ModConfigSpec.BooleanValue CONVERT_ON_ASSEMBLY;
     private static final ModConfigSpec.BooleanValue SHOW_RAPIER_HITBOXES;
@@ -106,6 +107,10 @@ public final class CTSConfig {
                 .defineInRange("maxTrackDistance", 1.5, 0.0, 32.0);
         RESYNC_STABLE_TICKS = builder.comment("Consecutive stable ticks required before rebinding.")
                 .defineInRange("stableTicks", 40, 1, 1000);
+        AUTO_RESYNC = builder.comment(
+                        "Put a settled wreck back on the nearest track automatically.",
+                        "Off by default: the wreck stays a physical Sable structure where it fell, like any other Sable body.")
+                .define("autoResync", false);
         builder.pop();
 
         builder.comment("Diagnostics.").push("debug");
@@ -135,7 +140,8 @@ public final class CTSConfig {
                         HALF_GAUGE.get(), CENTRE_OF_GRAVITY_HEIGHT.get(), MAX_CURVE_RADIUS.get(),
                         OVERSPEED_GRACE.get(), IMPACT_SPEED_THRESHOLD.get(), HARD_BRAKE_DECELERATION.get()),
                 new Tuning.Rebinding(RESYNC_MAX_SPEED.get(), RESYNC_MAX_ANGULAR_SPEED.get(),
-                        RESYNC_MAX_TILT.get(), RESYNC_MAX_TRACK_DISTANCE.get(), RESYNC_STABLE_TICKS.get()),
+                        RESYNC_MAX_TILT.get(), RESYNC_MAX_TRACK_DISTANCE.get(), RESYNC_STABLE_TICKS.get(),
+                        AUTO_RESYNC.get()),
                 new Tuning.Debug(SHOW_RAPIER_HITBOXES.get())).validated();
     }
 }

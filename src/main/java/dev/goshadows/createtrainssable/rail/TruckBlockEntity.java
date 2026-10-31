@@ -183,9 +183,8 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     private Vec3 alignment(ServerSubLevel subLevel, RailPath rail, RigidBodyHandle handle,
                            TruckSettings settings, double timeStep) {
         Direction facing = getBlockState().getValue(TruckBlock.FACING);
-        Vector3dc local = new Vector3d(facing.getStepX(), facing.getStepY(), facing.getStepZ());
-        Vector3d worldNormal = subLevel.logicalPose().transformNormal(local);
-        Vec3 forward = new Vec3(worldNormal.x(), worldNormal.y(), worldNormal.z());
+        Vec3 local = new Vec3(facing.getStepX(), facing.getStepY(), facing.getStepZ());
+        Vec3 forward = subLevel.logicalPose().transformNormal(local);
         if (forward.lengthSqr() < 1.0e-8) {
             return Vec3.ZERO;
         }

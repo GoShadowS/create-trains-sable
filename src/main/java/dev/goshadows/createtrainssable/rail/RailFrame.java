@@ -1,7 +1,5 @@
 package dev.goshadows.createtrainssable.rail;
 
-import net.minecraft.world.phys.Vec3;
-
 /**
  * The frame of a rail at one point: where the rail head is and which way it goes there.
  *
@@ -12,16 +10,16 @@ import net.minecraft.world.phys.Vec3;
 public interface RailFrame {
 
     /** World position of the rail head. */
-    Vec3 point();
+    Vec point();
 
     /** Unit tangent along the rail. */
-    Vec3 tangent();
+    Vec tangent();
 
     /** Unit up direction of the rail. */
-    Vec3 up();
+    Vec up();
 
     /** Unit sideways direction, {@code tangent x up}. */
-    Vec3 lateral();
+    Vec lateral();
 
     /** Curvature in 1/blocks; zero on straight track. */
     double curvature();

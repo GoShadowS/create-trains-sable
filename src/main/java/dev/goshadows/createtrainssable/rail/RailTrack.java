@@ -74,25 +74,25 @@ public final class RailTrack implements RailFrame {
     }
 
     @Override
-    public Vec3 point() {
-        return point;
+    public Vec point() {
+        return Vec.of(point);
     }
 
     @Override
-    public Vec3 tangent() {
-        return tangent;
+    public Vec tangent() {
+        return Vec.of(tangent);
     }
 
     /** Up direction of the rail: the normal of the track, not of the world. */
     @Override
-    public Vec3 up() {
-        return up;
+    public Vec up() {
+        return Vec.of(up);
     }
 
     /** Sideways direction of the rail, {@code tangent x up}. */
     @Override
-    public Vec3 lateral() {
-        return lateral;
+    public Vec lateral() {
+        return Vec.of(lateral);
     }
 
     /** Curvature in 1/blocks; zero on straight track. */
@@ -107,18 +107,18 @@ public final class RailTrack implements RailFrame {
     }
 
     /** Signed speed of a velocity along this rail, in m/s. */
-    public double speedAlong(Vec3 velocity) {
-        return velocity.dot(tangent);
+    public double speedAlong(Vec velocity) {
+        return velocity.dot(tangent());
     }
 
     /** Distance of a point from the rail head, signed along the lateral axis. */
-    public double lateralError(Vec3 probe) {
-        return probe.subtract(point).dot(lateral);
+    public double lateralError(Vec probe) {
+        return probe.sub(point()).dot(lateral());
     }
 
     /** Distance of a point from the rail head, signed along the up axis. */
-    public double verticalError(Vec3 probe) {
-        return probe.subtract(point).dot(up);
+    public double verticalError(Vec probe) {
+        return probe.sub(point()).dot(up());
     }
 
     /**
@@ -130,7 +130,7 @@ public final class RailTrack implements RailFrame {
      *
      * @return the moved contact, or {@code null} when the axle has left this edge and a search is due
      */
-    public RailTrack advanced(double travelled, Vec3 probe) {
+    public RailTrack advanced(double travelled, Vec probe) {
         if (edge.getLength() < 1.0e-4) {
             return null;
         }
@@ -139,7 +139,7 @@ public final class RailTrack implements RailFrame {
             return null;
         }
         Vec3 moved = edge.getPosition(graph, next);
-        return sampleAt(graph, edge, next, moved.distanceTo(probe));
+        return sampleAt(graph, edge, next, moved.distanceTo(new Vec3(probe.x(), probe.y(), probe.z())));
     }
 
     /**
@@ -148,15 +148,15 @@ public final class RailTrack implements RailFrame {
      * @param previous the contact the axle had, used to prefer a connected edge so a switch or a
      *                 Bezier joint does not teleport the contact to a neighbouring line
      */
-    public static Optional<RailTrack> find(ServerLevel level, Vec3 probe, RailTrack previous,
+    public static Optional<RailTrack> find(ServerLevel level, Vec probe, RailTrack previous,
                                            double maxDistance, double scanRadius) {
         if (previous != null) {
-            RailTrack continued = findNear(previous.graph, previous.edge, probe, maxDistance);
+            RailTrack continued = findNear(previous.graph, previous.edge, toVec3(probe), maxDistance);
             if (continued != null) {
                 return Optional.of(continued);
             }
         }
-        return findGlobally(level, probe, maxDistance, scanRadius);
+        return findGlobally(level, toVec3(probe), maxDistance, scanRadius);
     }
 
     private static Optional<RailTrack> findGlobally(ServerLevel level, Vec3 probe, double maxDistance,
@@ -200,6 +200,10 @@ public final class RailTrack implements RailFrame {
     }
 
     /** Prefers an edge connected to the one the axle was on: that is how a train follows a switch. */
+    private static Vec3 toVec3(Vec vec) {
+        return new Vec3(vec.x(), vec.y(), vec.z());
+    }
+
     private static RailTrack findNear(TrackGraph graph, TrackEdge edge, Vec3 probe, double maxDistance) {
         RailTrack best = null;
         double bestSquared = maxDistance * maxDistance;

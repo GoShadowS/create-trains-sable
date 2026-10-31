@@ -1,7 +1,6 @@
 package dev.goshadows.createtrainssable.rail;
 
 import dev.goshadows.createtrainssable.config.TruckSettings;
-import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,23 +22,23 @@ class WheelRailTest {
     private record TestRail(double curvature) implements RailFrame {
 
         @Override
-        public Vec3 point() {
-            return Vec3.ZERO;
+        public Vec point() {
+            return Vec.ZERO;
         }
 
         @Override
-        public Vec3 tangent() {
-            return new Vec3(1, 0, 0);
+        public Vec tangent() {
+            return new Vec(1, 0, 0);
         }
 
         @Override
-        public Vec3 up() {
-            return new Vec3(0, 1, 0);
+        public Vec up() {
+            return new Vec(0, 1, 0);
         }
 
         @Override
-        public Vec3 lateral() {
-            return tangent().cross(up()).normalize();
+        public Vec lateral() {
+            return tangent().cross(up()).normalized();
         }
     }
 
@@ -53,16 +52,16 @@ class WheelRailTest {
 
     @Test
     void anAxleOnTheRailIsGuided() {
-        WheelRail.Output output = WheelRail.solve(straightRail(), Vec3.ZERO, Vec3.ZERO,
-                new Vec3(1, 0, 0), Vec3.ZERO, 0.0, true, 2, 1, 100.0, 1.0, SETTINGS);
+        WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
+                new Vec(1, 0, 0), Vec.ZERO, 0.0, true, 2, 1, 100.0, 1.0, SETTINGS);
         assertTrue(output.guiding(), "an axle in the middle of the rail must hold");
     }
 
     @Test
     void anAxleBeyondTheFlangeStopsGuiding() {
-        Vec3 far = new Vec3(0, 0, SETTINGS.maxLateralError() + 0.5);
-        WheelRail.Output output = WheelRail.solve(straightRail(), far, Vec3.ZERO,
-                new Vec3(1, 0, 0), Vec3.ZERO, 0.0, true, 2, 1, 100.0, 10.0, SETTINGS);
+        Vec far = new Vec(0, 0, SETTINGS.maxLateralError() + 0.5);
+        WheelRail.Output output = WheelRail.solve(straightRail(), far, Vec.ZERO,
+                new Vec(1, 0, 0), Vec.ZERO, 0.0, true, 2, 1, 100.0, 10.0, SETTINGS);
         assertFalse(output.guiding());
         assertEquals(WheelRail.State.OFF_RAIL, output.state());
     }
@@ -70,9 +69,9 @@ class WheelRailTest {
     @Test
     void aFreshVehicleIsPulledOntoTheRail() {
         // Same offset as the failing case, but inside the window that follows assembly.
-        Vec3 offset = new Vec3(0, 0, SETTINGS.maxLateralError() + 0.5);
-        WheelRail.Output output = WheelRail.solve(straightRail(), offset, Vec3.ZERO,
-                new Vec3(1, 0, 0), Vec3.ZERO, 0.0, true, 2, 1, 100.0, 0.1, SETTINGS);
+        Vec offset = new Vec(0, 0, SETTINGS.maxLateralError() + 0.5);
+        WheelRail.Output output = WheelRail.solve(straightRail(), offset, Vec.ZERO,
+                new Vec(1, 0, 0), Vec.ZERO, 0.0, true, 2, 1, 100.0, 0.1, SETTINGS);
         assertTrue(output.guiding(), "the attach window must accept an axle that is not settled yet");
         assertTrue(output.force().z < 0.0, "the flange must push towards the rail, not away");
     }
@@ -81,8 +80,8 @@ class WheelRailTest {
     void aCurveTakenTooFastStopsGuiding() {
         double curvature = SETTINGS.curveLateralLimit();
         double tooFast = Math.sqrt(SETTINGS.curveLateralLimit() / curvature) + 1.0;
-        WheelRail.Output output = WheelRail.solve(curvedRail(curvature), Vec3.ZERO,
-                new Vec3(tooFast, 0, 0), new Vec3(1, 0, 0), Vec3.ZERO, tooFast, true, 2, 1, 100.0,
+        WheelRail.Output output = WheelRail.solve(curvedRail(curvature), Vec.ZERO,
+                new Vec(tooFast, 0, 0), new Vec(1, 0, 0), Vec.ZERO, tooFast, true, 2, 1, 100.0,
                 10.0, SETTINGS);
         assertFalse(output.guiding());
         assertEquals(WheelRail.State.OVERSPEED, output.state());
@@ -91,8 +90,8 @@ class WheelRailTest {
     @Test
     void tractionIsCappedByAdhesion() {
         // Demand far above what the wheel can transmit: 32 RPM is 1.6 m/s, the vehicle is still.
-        WheelRail.Output output = WheelRail.solve(straightRail(), Vec3.ZERO, Vec3.ZERO,
-                new Vec3(1, 0, 0), Vec3.ZERO, 30.0, true, 1, 1, 1000.0, 10.0, SETTINGS);
+        WheelRail.Output output = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
+                new Vec(1, 0, 0), Vec.ZERO, 30.0, true, 1, 1, 1000.0, 10.0, SETTINGS);
         double adhesion = SETTINGS.friction() * SETTINGS.gravity();
         assertTrue(output.force().x <= 1000.0 * adhesion + 1.0e-6,
                 "the wheel cannot push harder than it grips");
@@ -100,8 +99,8 @@ class WheelRailTest {
 
     @Test
     void anIdlerNeverPulls() {
-        WheelRail.Output standing = WheelRail.solve(straightRail(), Vec3.ZERO, Vec3.ZERO,
-                new Vec3(1, 0, 0), Vec3.ZERO, 30.0, false, 2, 1, 1000.0, 10.0, SETTINGS);
+        WheelRail.Output standing = WheelRail.solve(straightRail(), Vec.ZERO, Vec.ZERO,
+                new Vec(1, 0, 0), Vec.ZERO, 30.0, false, 2, 1, 1000.0, 10.0, SETTINGS);
         assertTrue(standing.force().x <= 0.0, "a rolling truck may only resist motion");
     }
 
@@ -114,9 +113,9 @@ class WheelRailTest {
 
     @Test
     void alignmentTurnsTheShortWayRound() {
-        Vec3 forward = new Vec3(0, 0, 1);
-        Vec3 wanted = new Vec3(1, 0, 0);
-        Vec3 delta = WheelRail.alignment(forward, wanted, Vec3.ZERO, SETTINGS);
+        Vec forward = new Vec(0, 0, 1);
+        Vec wanted = new Vec(1, 0, 0);
+        Vec delta = WheelRail.alignment(forward, wanted, Vec.ZERO, SETTINGS);
         // Rotating (0,0,1) towards (1,0,0) is a positive rotation about +Y.
         assertTrue(delta.y > 0.0, "the body must turn towards the rail, not away from it");
         assertTrue(delta.length() <= SETTINGS.maxAngularAcceleration() + 1.0e-9);

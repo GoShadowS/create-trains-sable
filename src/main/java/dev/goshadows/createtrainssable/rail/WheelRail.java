@@ -1,8 +1,6 @@
 package dev.goshadows.createtrainssable.rail;
 
 import dev.goshadows.createtrainssable.config.TruckSettings;
-import net.minecraft.world.phys.Vec3;
-
 /**
  * The wheel/rail contact, as pure arithmetic.
  *
@@ -47,7 +45,7 @@ public final class WheelRail {
      * @param verticalError      measured vertical error in blocks, for logging
      * @param longitudinalError  difference between the commanded and the actual speed, in m/s
      */
-    public record Output(Vec3 force, Vec3 angularAcceleration, State state, double lateralError,
+    public record Output(Vec force, Vec angularAcceleration, State state, double lateralError,
                          double verticalError, double longitudinalError) {
 
         public boolean guiding() {
@@ -56,13 +54,13 @@ public final class WheelRail {
     }
 
     private static final Output IDLE =
-            new Output(Vec3.ZERO, Vec3.ZERO, State.NO_TRACK, 0.0, 0.0, 0.0);
+            new Output(Vec.ZERO, Vec.ZERO, State.NO_TRACK, 0.0, 0.0, 0.0);
 
     private WheelRail() {
     }
 
     public static Output idle(State state) {
-        return new Output(Vec3.ZERO, Vec3.ZERO, state, 0.0, 0.0, 0.0);
+        return new Output(Vec.ZERO, Vec.ZERO, state, 0.0, 0.0, 0.0);
     }
 
     /**
@@ -79,13 +77,13 @@ public final class WheelRail {
      * @param secondsSinceAssembly how long ago the vehicle was assembled, for the attach window
      */
     @SuppressWarnings("checkstyle:ParameterNumber")
-    public static Output solve(RailFrame track, Vec3 axle, Vec3 velocity, Vec3 forward, Vec3 spin,
+    public static Output solve(RailFrame track, Vec axle, Vec velocity, Vec forward, Vec spin,
                                double targetSpeed, boolean driven, int truckCount, int drivenCount,
                                double mass, double secondsSinceAssembly, TruckSettings settings) {
         if (track == null) {
             return IDLE;
         }
-        Vec3 offset = axle.subtract(track.point());
+        Vec offset = axle.sub(track.point());
         double lateralError = offset.dot(track.lateral());
         double verticalError = offset.dot(track.up());
         double lateralSpeed = velocity.dot(track.lateral());
@@ -100,12 +98,12 @@ public final class WheelRail {
                 && Math.abs(verticalError) <= settings.attachRadius();
 
         if (overspeed) {
-            return withErrors(new Output(Vec3.ZERO, Vec3.ZERO, State.OVERSPEED, lateralError,
-                    verticalError, targetSpeed - along), lateralError, verticalError, targetSpeed - along);
+            return new Output(Vec.ZERO, Vec.ZERO, State.OVERSPEED, lateralError, verticalError,
+                    targetSpeed - along);
         }
         if (offRail && !attaching) {
-            return withErrors(new Output(Vec3.ZERO, Vec3.ZERO, State.OFF_RAIL, lateralError,
-                    verticalError, targetSpeed - along), lateralError, verticalError, targetSpeed - along);
+            return new Output(Vec.ZERO, Vec.ZERO, State.OFF_RAIL, lateralError, verticalError,
+                    targetSpeed - along);
         }
 
         // 1. Hold the axle on the rail, and carry this axle's share of the vehicle's weight.
@@ -121,7 +119,7 @@ public final class WheelRail {
             lateralAcceleration *= scale;
             verticalAcceleration *= scale;
         }
-        Vec3 support = track.lateral().scale(lateralAcceleration)
+        Vec support = track.lateral().scale(lateralAcceleration)
                 .add(track.up().scale(verticalAcceleration));
 
         // 2. Traction along the rail, capped by what the wheel can actually transmit.
@@ -139,30 +137,24 @@ public final class WheelRail {
                 Math.min(settings.traction(), adhesion));
 
         double forceScale = mass / Math.max(1, driven ? drivenCount : truckCount);
-        Vec3 force = support.add(track.tangent().scale(demand)).scale(forceScale);
+        Vec force = support.add(track.tangent().scale(demand)).scale(forceScale);
 
         // 3. Steer the body along the rail.
-        Vec3 angularAcceleration = alignment(forward, track.tangent(), spin, settings);
+        Vec angularAcceleration = alignment(forward, track.tangent(), spin, settings);
 
         return new Output(force, angularAcceleration, State.GUIDING, lateralError, verticalError,
                 targetSpeed - along);
     }
 
-    private static Output withErrors(Output output, double lateral, double vertical,
-                                     double longitudinal) {
-        return new Output(output.force(), output.angularAcceleration(), output.state(), lateral,
-                vertical, longitudinal);
-    }
-
     /** Angular acceleration that turns {@code forward} towards {@code wanted}, with damping. */
-    public static Vec3 alignment(Vec3 forward, Vec3 wanted, Vec3 spin, TruckSettings settings) {
+    public static Vec alignment(Vec forward, Vec wanted, Vec spin, TruckSettings settings) {
         if (forward.lengthSqr() < 1.0e-8) {
-            return Vec3.ZERO;
+            return Vec.ZERO;
         }
-        Vec3 forwardUnit = forward.normalize();
+        Vec forwardUnit = forward.normalized();
         double sign = forwardUnit.dot(wanted) >= 0.0 ? 1.0 : -1.0;
-        Vec3 axis = forwardUnit.cross(wanted.scale(sign));
-        Vec3 delta = axis.scale(settings.alignGain()).subtract(spin.scale(settings.alignDamping()));
+        Vec axis = forwardUnit.cross(wanted.scale(sign));
+        Vec delta = axis.scale(settings.alignGain()).sub(spin.scale(settings.alignDamping()));
         double limit = settings.maxAngularAcceleration();
         double magnitude = delta.length();
         if (magnitude > limit) {

@@ -40,7 +40,7 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     private long nextSearchTick = Long.MIN_VALUE;
     private long firstPhysicsTick = -1L;
     private WheelRail.State state = WheelRail.State.NO_TRACK;
-    private Vec3 lastAxle = Vec3.ZERO;
+    private Vec lastAxle = Vec.ZERO;
     private double lastSpeed;
     private double lastLateralError;
     private WheelRail.State loggedState = WheelRail.State.NO_TRACK;
@@ -74,7 +74,7 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
             return;
         }
         nextSearchTick = now + settings.trackRecheckTicks();
-        Vec3 axle = axlePosition(subLevel);
+        Vec axle = axlePosition(subLevel);
         Optional<RailTrack> found = RailTrack.find(subLevel.getLevel(), axle, track,
                 settings.maxLateralError() * 2.0 + 1.0, settings.scanRadius());
         track = found.orElse(null);
@@ -95,11 +95,11 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         }
         double secondsSinceAssembly = (now - firstPhysicsTick) / 20.0;
 
-        Vec3 axle = axlePosition(subLevel);
+        Vec axle = axlePosition(subLevel);
         Vector3dc rawVelocity = handle.getLinearVelocity(new Vector3d());
-        Vec3 velocity = new Vec3(rawVelocity.x(), rawVelocity.y(), rawVelocity.z());
+        Vec velocity = new Vec(rawVelocity.x(), rawVelocity.y(), rawVelocity.z());
         Vector3dc rawSpin = handle.getAngularVelocity(new Vector3d());
-        Vec3 spin = new Vec3(rawSpin.x(), rawSpin.y(), rawSpin.z());
+        Vec spin = new Vec(rawSpin.x(), rawSpin.y(), rawSpin.z());
 
         // Between searches the contact rides along the edge under the wheel.
         if (track != null) {
@@ -133,9 +133,9 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     }
 
     /** Turns the contact force into an impulse at the axle, and the steering into angular velocity. */
-    private void apply(ServerSubLevel subLevel, RigidBodyHandle handle, Vec3 axle,
+    private void apply(ServerSubLevel subLevel, RigidBodyHandle handle, Vec axle,
                        WheelRail.Output output, double timeStep) {
-        Vec3 worldImpulse = output.force().scale(timeStep);
+        Vec worldImpulse = output.force().scale(timeStep);
         if (worldImpulse.lengthSqr() > 0.0) {
             // The handle takes plot-local vectors: the pipeline rotates them by the body orientation.
             Vector3d localImpulse = subLevel.logicalPose().transformNormalInverse(
@@ -144,19 +144,19 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
                     new Vector3d(axle.x, axle.y, axle.z), new Vector3d());
             handle.applyImpulseAtPoint(axleInPlot, localImpulse);
         }
-        Vec3 angular = output.angularAcceleration();
+        Vec angular = output.angularAcceleration();
         if (angular.lengthSqr() > 0.0) {
-            Vec3 delta = angular.scale(timeStep);
+            Vec delta = angular.scale(timeStep);
             handle.addLinearAndAngularVelocity(new Vector3d(),
                     new Vector3d(delta.x, delta.y, delta.z));
         }
     }
 
     /** World direction the truck faces: the axle runs across it. */
-    private Vec3 forward(ServerSubLevel subLevel) {
+    private Vec forward(ServerSubLevel subLevel) {
         Direction facing = getBlockState().getValue(TruckBlock.FACING);
         Vec3 local = new Vec3(facing.getStepX(), facing.getStepY(), facing.getStepZ());
-        return subLevel.logicalPose().transformNormal(local);
+        return Vec.of(subLevel.logicalPose().transformNormal(local));
     }
 
     /** Which way the vehicle goes when the shaft turns forwards. */
@@ -166,11 +166,11 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     }
 
     /** World position of the axle: the point that has to stay on the rail. */
-    public Vec3 axlePosition(ServerSubLevel subLevel) {
+    public Vec axlePosition(ServerSubLevel subLevel) {
         Vector3d local = new Vector3d(worldPosition.getX() + 0.5, worldPosition.getY() + 0.25,
                 worldPosition.getZ() + 0.5);
         Vector3d world = subLevel.logicalPose().transformPosition(local, new Vector3d());
-        return new Vec3(world.x(), world.y(), world.z());
+        return new Vec(world.x(), world.y(), world.z());
     }
 
     private static double vehicleMass(ServerSubLevel subLevel) {

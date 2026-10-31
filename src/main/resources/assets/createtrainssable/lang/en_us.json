@@ -8,5 +8,7 @@
   "itemGroup.createtrainssable.main": "Create Trains Sable",
   "block.createtrainssable.traction_truck": "Traction Truck",
   "block.createtrainssable.rolling_truck": "Rolling Truck",
-  "block.createtrainssable.spring_coupling": "Spring Coupling"
+  "block.createtrainssable.spring_coupling": "Spring Coupling",
+  "item.createtrainssable.assembly_tool": "Vehicle Assembly Tool",
+  "item.createtrainssable.assembly_tool.tooltip": "Right-click a built vehicle to make it a physical Sable structure."
 }

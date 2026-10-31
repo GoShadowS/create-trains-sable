@@ -78,8 +78,9 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         }
         nextSearchTick = now + settings.trackRecheckTicks();
         Vec axle = axlePosition(subLevel);
+        // The truck's facing decides which of the two parallel edges of a rail it rides.
         Optional<RailTrack> found = RailTrack.find(subLevel.getLevel(), axle, track,
-                settings.maxLateralError() * 2.0 + 1.0, settings.scanRadius());
+                settings.maxLateralError() * 2.0 + 1.0, settings.scanRadius(), forward(subLevel));
         track = found.orElse(null);
         if (track == null && state != WheelRail.State.NO_TRACK) {
             log(WheelRail.State.NO_TRACK);

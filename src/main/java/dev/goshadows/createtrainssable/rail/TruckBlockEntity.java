@@ -7,6 +7,7 @@ import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.config.TruckSettings;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
+import dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -118,7 +119,8 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
                 : 0.0;
 
         WheelRail.Output output = WheelRail.solve(track, axle, velocity, forward(subLevel), spin,
-                target, isDriven(), trucks, driven, mass, secondsSinceAssembly, settings);
+                target, isDriven(), trucks, driven, mass, gravity(subLevel, settings),
+                secondsSinceAssembly, settings);
         state = output.state();
         lastAxle = axle;
         lastSpeed = track == null ? 0.0 : track.speedAlong(velocity);
@@ -171,6 +173,25 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
                 worldPosition.getZ() + 0.5);
         Vector3d world = subLevel.logicalPose().transformPosition(local, new Vector3d());
         return new Vec(world.x(), world.y(), world.z());
+    }
+
+    /**
+     * Gravity the engine actually applies to this vehicle.
+     *
+     * <p>Sable gives every body the gravity of its dimension, so the rail has to carry exactly that
+     * amount and not a number from a config file. The configured value is only the fallback for a
+     * dimension whose data is missing.</p>
+     */
+    private static double gravity(ServerSubLevel subLevel, TruckSettings settings) {
+        try {
+            double gravity = DimensionPhysicsData.getGravity(subLevel.getLevel()).length();
+            if (Double.isFinite(gravity) && gravity > 0.1) {
+                return gravity;
+            }
+        } catch (RuntimeException e) {
+            CreateTrainsSable.LOGGER.debug("No dimension gravity available; using the config", e);
+        }
+        return settings.gravity();
     }
 
     private static double vehicleMass(ServerSubLevel subLevel) {

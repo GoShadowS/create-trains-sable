@@ -102,7 +102,8 @@ public final class CTSConfig {
         builder.pop();
 
         builder.comment("Diagnostics.").push("debug");
-        GRAVITY = builder.comment("Gravity used by the wheel/rail contact, in m/s^2.")
+        GRAVITY = builder.comment("Fallback gravity for the wheel/rail contact, in m/s^2. The",
+                        "contact normally uses the gravity Sable applies to the dimension.")
                 .defineInRange("gravity", 9.81, 0.1, 50.0);
         DEBUG_LOG = builder.comment("Log the state of every truck once a second.")
                 .define("logTrucks", false);

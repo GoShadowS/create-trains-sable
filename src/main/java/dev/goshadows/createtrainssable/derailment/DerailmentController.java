@@ -24,15 +24,22 @@ import java.util.UUID;
 /**
  * Server-authoritative owner of the train representation.
  *
- * <p>Every train that exists in the world is represented by Sable sub-levels: the mod adopts a
- * train as soon as its carriages are present, hides Create's contraption entity and drives the
- * sub-levels along the carriage path. A derailment switches that structure to free physics, and
- * a settled wreck is handed back to Create's {@code TrackGraph}.</p>
+ * <p>Trains are physical. The mod adopts a train as soon as its carriages are present - normally
+ * the same tick the player assembles it - hides Create's contraption entity and holds the
+ * sub-levels on the rails with forces until they lose them. A derailment switches that structure to
+ * free physics, and a settled wreck can be handed back to Create's {@code TrackGraph}.</p>
+ *
+ * <p>Trains assembled before this mod was installed, trains loaded from a save and trains whose
+ * carriage entities were not present yet are all picked up by the same adoption sweep, so there is
+ * no state in which a train silently stays a contraption.</p>
  */
 public final class DerailmentController {
 
-    /** Ticks between attempts to adopt a train whose carriages were not loaded yet. */
-    private static final int ADOPTION_RETRY_TICKS = 200;
+    /**
+     * Ticks between attempts to adopt a train whose carriages were not loaded yet. One second: an
+     * assembled train must not spend ten seconds as a plain contraption waiting for a retry.
+     */
+    private static final int ADOPTION_RETRY_TICKS = 20;
 
     private final PhysicsBackend backend;
     private final Map<UUID, TrainStructure> structures = new LinkedHashMap<>();
@@ -46,9 +53,9 @@ public final class DerailmentController {
 
     public void tick(ServerLevel level, boolean trainsTickHere) {
         Tuning tuning = CTSConfig.snapshot();
-        if (!tuning.general().enabled() || !CTSConfig.convertTrains()) {
-            // The rail truck system needs no train conversion at all, so the old path is off by
-            // default. Structures left over from a world that used it are released, not leaked.
+        if (!tuning.general().enabled() || !CTSConfig.physicalTrains()) {
+            // Physical trains are switched off: leave them entirely to Create, but do not leak
+            // structures built while the option was on.
             releaseAll(ReleaseReason.ABANDON);
             return;
         }
@@ -69,7 +76,7 @@ public final class DerailmentController {
         }
 
         drainCrashSignals(level, tuning);
-        if (CTSConfig.convertOnAssembly()) {
+        if (CTSConfig.physicalAtAssembly()) {
             adoptTrains(level, tuning, tick);
         }
         scanForDerailments(level, tuning, tick);

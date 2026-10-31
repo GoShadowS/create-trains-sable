@@ -33,9 +33,22 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
     /** Highest speed a driving truck is allowed to command, in m/s. */
     private static final double HARD_SPEED_CAP = 60.0;
 
+    /**
+     * Ticks after the first physics step in which the truck is allowed to pull itself onto the
+     * rail instead of being called derailed. An assembled vehicle is never placed to the millimetre,
+     * and without this window the very first physics step would decide that the axle is off the
+     * rail and drop the whole train.
+     */
+    private static final int ATTACH_WINDOW_TICKS = 40;
+
+    /** How far the axle may be from the rail and still be pulled onto it while attaching. */
+    private static final double ATTACH_RADIUS = 3.0;
+
     private RailPath rail;
     private long railStamp = Long.MIN_VALUE;
+    private long firstPhysicsTick = -1L;
     private boolean reportedDerailment;
+    private boolean reportedNoRail;
     private Vec3 lastVelocity = Vec3.ZERO;
 
     public TruckBlockEntity(BlockPos pos, BlockState state) {
@@ -59,6 +72,15 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         TruckSettings settings = CTSConfig.trucks();
         Vec3 axle = axlePosition(subLevel);
 
+        long now = level.getGameTime();
+        if (firstPhysicsTick < 0L) {
+            firstPhysicsTick = now;
+        }
+        // Freshly assembled: the axle still has to settle onto the rail head, so the off-rail test
+        // is suspended for a moment. Overspeed is not: a curve taken too fast is a derailment even
+        // in the first second.
+        boolean attaching = now - firstPhysicsTick < ATTACH_WINDOW_TICKS;
+
         rail = refreshRail(subLevel, axle, settings);
 
         Vector3dc rawVelocity = handle.getLinearVelocity(new Vector3d());
@@ -80,7 +102,19 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
                     || Math.abs(vertical) > settings.maxVerticalError();
             boolean tooFast = rail.isOverspeed(Math.abs(speed), settings.curveLateralLimit());
 
-            if (offRail || tooFast) {
+            boolean withinReach = Math.abs(lateral) <= ATTACH_RADIUS
+                    && Math.abs(vertical) <= ATTACH_RADIUS;
+            if (!tooFast && (!offRail || (attaching && withinReach))) {
+                // Either the axle is on the rail, or this is the moment the vehicle is assembled and
+                // the guidance has to bring the axle onto it. From here on the truck is held on the
+                // rail by force only: nothing is teleported, so a wall or a curve can win.
+                reportedDerailment = false;
+                reportedNoRail = false;
+                deltaVelocity = guidance(rail, velocity, axle, settings, trucks, timeStep)
+                        .add(rail.tangent().scale(
+                                longitudinal(speed, targetSpeed, settings, driven) * timeStep));
+                deltaAngular = alignment(subLevel, rail, handle, settings, timeStep);
+            } else {
                 // The axle is not on the rail any more, or the curve cannot hold the vehicle.
                 // Guidance simply stops; the body keeps its momentum and becomes a wreck.
                 if (!reportedDerailment) {
@@ -92,15 +126,15 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
                             String.format("%.2f", vertical), String.format("%.2f", speed),
                             String.format("%.4f", rail.curvature()));
                 }
-            } else {
-                reportedDerailment = false;
-                deltaVelocity = guidance(rail, velocity, axle, settings, trucks, timeStep)
-                        .add(rail.tangent().scale(
-                                longitudinal(speed, targetSpeed, settings, driven) * timeStep));
-                deltaAngular = alignment(subLevel, rail, handle, settings, timeStep);
             }
         } else {
             reportedDerailment = false;
+            if (!reportedNoRail) {
+                reportedNoRail = true;
+                CreateTrainsSable.LOGGER.info(
+                        "Rail truck at {} found no track within {} blocks; the vehicle is free",
+                        worldPosition, String.format("%.1f", settings.scanRadius()));
+            }
         }
 
         if (deltaVelocity.lengthSqr() > 0.0 || deltaAngular.lengthSqr() > 0.0) {

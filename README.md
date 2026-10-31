@@ -1,9 +1,11 @@
 # Create Trains Sable
 
-**Physics trains for Create.** Put rail trucks on your build, assemble it into a Sable
-sub-level, drive it with a shaft - and it rolls along Create's rails as a real rigid
-body: it takes curves, slips, couples to wagons, and leaves the rails when it is going
-too fast for the curve it is in.
+**Physics trains for Create.** Assemble a train and it is already a physical object:
+every carriage becomes a Sable sub-level the moment it is built, held on the rails by
+wheel forces until the rails lose it. Build your own vehicle instead and it works the
+same way - rail trucks under the frame, a shaft for power, and it rolls as one rigid
+body that takes curves, slips, couples to wagons and derails when it is going too fast
+for the bend it is in.
 
 Minecraft 1.21.1 · NeoForge · Create 6.0.10 · Sable 2.0
 
@@ -11,8 +13,12 @@ Minecraft 1.21.1 · NeoForge · Create 6.0.10 · Sable 2.0
 
 ## Features
 
+- **Physical on assembly.** A train assembled in a station, or loaded from a save, is a
+  Sable structure within a second - not a contraption that waits for a crash to become
+  one. It stays attached to the rail under its wheels until the wheels leave it.
 - **Trains that are objects, not animations.** The vehicle you built *is* the train: one
   body, one collision shape, one thing to walk on, push, load with cargo and crash.
+  Create still owns the schedule, the seats and the route; the physics owns the motion.
 - **Real traction.** Speed comes from rotation, not from a number in a menu. Wheel grip
   caps acceleration, brakes cap deceleration, and a heavy train accelerates like a heavy
   train.
@@ -33,9 +39,11 @@ Minecraft 1.21.1 · NeoForge · Create 6.0.10 · Sable 2.0
 | **Rolling Truck** | Carries weight and rolls. Use as many as the train needs. |
 | **Spring Coupling** | Links two vehicles that are close enough and facing each other. |
 
-The trucks are drawn as a low steel frame on a visible wheel; the traction truck carries
-its drive housing on top, so a powered axle and an idler axle never look the same. The
-coupling is a plate with a coil spring reaching towards the vehicle in front of it.
+Each truck is a low steel frame with a riveted waist and a wheel on both sides of the
+axle. The driven one carries a red motor housing on top of the frame; the idler only has a
+bolted cover, so a powered axle and an idler axle never look the same from across the
+track. The coupling is a cast buffer plate with a coil spring reaching towards the vehicle
+in front of it.
 
 All three are in the mod's own creative tab.
 
@@ -75,6 +83,12 @@ threshold decided it should.
 `config/createtrainssable-server.toml`, applied immediately:
 
 ```toml
+[general]
+physicalTrains = true        # trains are Sable sub-levels, not contraptions
+physicalAtAssembly = true    # ...from the moment they are assembled, not only after a crash
+```
+
+```toml
 [trucks]
 speedPerRpm = 0.05           # m/s of target speed per RPM of the driving shaft
 tractionAcceleration = 1.2   # m/s^2 the driven wheels can put down
@@ -107,9 +121,14 @@ curves, lower it and a normal bend at speed throws the vehicle off.
 
 ## Known limitations
 
-- **Art is a first pass.** The models and textures are made for this mod but they are
-  simple: a steel frame, a wheel, a brass drive housing, a coil spring. They are meant to be
-  replaced by a proper art pass, not to be the final look.
+- **Trains are held by a servo, not by axles.** Create's spline still says where a carriage
+  should be and a force controller takes the body there; the body can lose that argument -
+  that is a derailment - but it cannot yet steer itself along a switch that Create would not
+  have taken.
+- **Art is a first pass.** The models and textures are drawn for this mod from scratch and
+  are deliberately flat: a steel frame, a wheel, a red drive housing, a buffer plate and a
+  coil spring, in 16x16. They are meant to be replaced by a proper art pass.
+  `tools/make_textures.py` regenerates them if a colour or a shape needs changing.
 - **Trucks need an assembled sub-level.** They do nothing lying in the world, and this mod
   does not ship an assembly tool - assemble with Create: Aeronautics.
 - **The rail contact is a servo, not a flange.** There is no wheel lift, no axle load

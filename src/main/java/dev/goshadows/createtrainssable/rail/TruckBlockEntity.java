@@ -139,16 +139,16 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         if (worldImpulse.lengthSqr() > 0.0) {
             // The handle takes plot-local vectors: the pipeline rotates them by the body orientation.
             Vector3d localImpulse = subLevel.logicalPose().transformNormalInverse(
-                    new Vector3d(worldImpulse.x, worldImpulse.y, worldImpulse.z));
+                    new Vector3d(worldImpulse.x(), worldImpulse.y(), worldImpulse.z()));
             Vector3d axleInPlot = subLevel.logicalPose().transformPositionInverse(
-                    new Vector3d(axle.x, axle.y, axle.z), new Vector3d());
+                    new Vector3d(axle.x(), axle.y(), axle.z()), new Vector3d());
             handle.applyImpulseAtPoint(axleInPlot, localImpulse);
         }
         Vec angular = output.angularAcceleration();
         if (angular.lengthSqr() > 0.0) {
             Vec delta = angular.scale(timeStep);
             handle.addLinearAndAngularVelocity(new Vector3d(),
-                    new Vector3d(delta.x, delta.y, delta.z));
+                    new Vector3d(delta.x(), delta.y(), delta.z()));
         }
     }
 

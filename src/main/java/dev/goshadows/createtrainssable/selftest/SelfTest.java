@@ -281,6 +281,9 @@ public final class SelfTest {
         CarriageBogey trailing = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
                 rig.railPoint(trailingAxle - 1.0), rig.railPoint(trailingAxle + 1.0));
         Carriage carriage = new Carriage(leading, trailing, 2);
+        // A real carriage gets this from its contraption; a harness-built one has to ask, or writing
+        // it to NBT throws. Initialising it here keeps the round-trip test honest.
+        carriage.storage.initialize();
         Train train = new Train(UUID.randomUUID(), UUID.randomUUID(), rig.graph,
                 new ArrayList<>(List.of(carriage)), new ArrayList<>(), true, 0);
         Create.RAILWAYS.addTrain(train);

@@ -3,10 +3,9 @@ package dev.goshadows.createtrainssable.bogey;
 /**
  * Tuning for the physics bogeys and couplers, in the units the physics engine uses.
  *
- * <p>Everything is an acceleration rather than a force on purpose. Sable exposes mass through a
- * companion type, and a bead-on-rail model does not need it: a heavier vehicle should accelerate
- * exactly like a light one, and expressing the controller in m/s^2 is also what makes the numbers
- * comparable to the ones in Create: Simurail's configuration.</p>
+ * <p>Everything is an acceleration rather than a force on purpose: a heavier vehicle should
+ * accelerate exactly like a light one, and an acceleration is what the physics pipeline can apply
+ * without a mass lookup.</p>
  */
 public record BogeySettings(double speedPerRpm, double tractionAcceleration, double brakeAcceleration,
                             double guideStiffness, double guideDamping, double maxGuideAcceleration,

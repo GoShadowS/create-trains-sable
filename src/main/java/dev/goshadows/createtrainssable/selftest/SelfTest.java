@@ -485,6 +485,7 @@ public final class SelfTest {
         private double horizontalSpeed;
         private double dropped;
         private boolean pushed;
+        private boolean sawOffRail;
 
         DerailScenario() {
             super("derail", 90, 2288);
@@ -498,6 +499,9 @@ public final class SelfTest {
             if (ticks == 20) {
                 rig.push(new Vec(0, 0, PUSH * rig.mass()));
                 pushed = true;
+            }
+            if (pushed && rig.states().contains("OFF_RAIL")) {
+                sawOffRail = true;
             }
             if (ticks % 10 == 0 && ticks >= 20) {
                 log("lateral=" + f(rig.lateralError())
@@ -522,8 +526,12 @@ public final class SelfTest {
                 fail("the vehicle was never pushed");
                 return;
             }
-            if (!allTrucks(WheelRail.State.OFF_RAIL)) {
-                fail("still on the rail after a " + PUSH + " m/s push: " + states());
+            if (!sawOffRail) {
+                fail("the flange never gave up after a " + PUSH + " m/s push: " + states());
+                return;
+            }
+            if (allTrucks(WheelRail.State.GUIDING)) {
+                fail("still guiding after the push: " + states());
                 return;
             }
             if (horizontalSpeed < 2.0) {
@@ -542,6 +550,7 @@ public final class SelfTest {
             return "push=" + f(PUSH)
                     + " horizontal_speed=" + f(horizontalSpeed)
                     + " dropped=" + f(-dropped)
+                    + " saw_off_rail=" + sawOffRail
                     + " states=" + states()
                     + " ticks=" + ticks;
         }

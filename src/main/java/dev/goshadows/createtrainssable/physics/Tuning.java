@@ -7,7 +7,7 @@ package dev.goshadows.createtrainssable.physics;
  * testable without a running game. CTSConfig builds one snapshot per read.</p>
  */
 public record Tuning(General general, Traction traction, Derailment derailment,
-                     Rebinding rebinding, Debug debug) {
+                     Rails rails, Rebinding rebinding, Debug debug) {
 
     public enum ConversionMode {
         /** Convert only when a trigger fires. */
@@ -31,6 +31,21 @@ public record Tuning(General general, Traction traction, Derailment derailment,
                              double impactSpeedThreshold, double hardBrakeDeceleration) {
     }
 
+    /**
+     * How a train is held on its rails.
+     *
+     * <p>{@code physical} selects the real simulation: the rails apply forces through a
+     * proportional-derivative controller and the body is never moved by hand. {@code maxAcceleration}
+     * is the grip the wheel/rail contact can deliver; when the demand exceeds it the rails are
+     * overloaded, which is what turns a curve taken too fast into a derailment.</p>
+     */
+    public record Rails(boolean physical, double positionGain, double velocityGain,
+                        double maxAcceleration, double angularGain, double angularVelocityGain,
+                        double maxAngularAcceleration, double angleTolerance,
+                        boolean couplingEnabled, double couplingStiffness, double couplingDamping,
+                        double couplingMaxAcceleration, double lateralTolerance, int toleranceTicks) {
+    }
+
     public record Rebinding(double maxSpeed, double maxAngularSpeed, double maxTiltDegrees,
                             double maxTrackDistance, int stableTicks, boolean autoResync) {
     }
@@ -43,6 +58,8 @@ public record Tuning(General general, Traction traction, Derailment derailment,
                 new General(true, ConversionMode.THRESHOLD, 10, 12000),
                 new Traction(0.5, 0.1, 0.45, 0.02, 1.0, 0.18, 9.81),
                 new Derailment(1.8, 0.45, 0.75, 1.1, 64.0, 1.15, 4.0, 18.0),
+                new Rails(true, 10.0, 4.0, 24.0, 5.0, 2.0, 12.0, 0.35, true, 8.0, 4.0, 20.0,
+                        1.5, 10),
                 new Rebinding(0.25, 0.10, 12.0, 1.5, 40, false),
                 new Debug(false));
     }
@@ -74,6 +91,22 @@ public record Tuning(General general, Traction traction, Derailment derailment,
                 clamp(derailment.impactSpeedThreshold(), 0.0, 100.0),
                 clamp(derailment.hardBrakeDeceleration(), 0.0, 200.0));
 
+        Rails rails_ = new Rails(
+                rails.physical(),
+                clamp(rails.positionGain(), 0.0, 100.0),
+                clamp(rails.velocityGain(), 0.0, 100.0),
+                clamp(rails.maxAcceleration(), 0.1, 500.0),
+                clamp(rails.angularGain(), 0.0, 100.0),
+                clamp(rails.angularVelocityGain(), 0.0, 100.0),
+                clamp(rails.maxAngularAcceleration(), 0.1, 500.0),
+                clamp(rails.angleTolerance(), 0.0, Math.PI),
+                rails.couplingEnabled(),
+                clamp(rails.couplingStiffness(), 0.0, 10000.0),
+                clamp(rails.couplingDamping(), 0.0, 10000.0),
+                clamp(rails.couplingMaxAcceleration(), 0.0, 500.0),
+                clamp(rails.lateralTolerance(), 0.0, 16.0),
+                (int) clamp(rails.toleranceTicks(), 1, 200));
+
         Rebinding r = new Rebinding(
                 clamp(rebinding.maxSpeed(), 0.0, 10.0),
                 clamp(rebinding.maxAngularSpeed(), 0.0, 10.0),
@@ -82,7 +115,7 @@ public record Tuning(General general, Traction traction, Derailment derailment,
                 (int) clamp(rebinding.stableTicks(), 1, 1000),
                 rebinding.autoResync());
 
-        return new Tuning(g, t, d, r, new Debug(debug.showRapierHitboxes()));
+        return new Tuning(g, t, d, rails_, r, new Debug(debug.showRapierHitboxes()));
     }
 
     private static double clamp(double value, double min, double max) {

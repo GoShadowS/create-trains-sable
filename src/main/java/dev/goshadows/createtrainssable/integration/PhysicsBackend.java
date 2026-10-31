@@ -9,6 +9,15 @@ public interface PhysicsBackend {
 
     String description();
 
+    /**
+     * True when {@link AttachedBody#drive(dev.goshadows.createtrainssable.physics.Point3,
+     * dev.goshadows.createtrainssable.physics.Point3)} actually moves the body. Backends without
+     * force support leave the caller on the kinematic path.
+     */
+    default boolean supportsForces() {
+        return false;
+    }
+
     Optional<AttachedBody> attach(ConversionRequest request);
 
     void shutdown();

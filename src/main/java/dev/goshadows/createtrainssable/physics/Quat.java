@@ -53,6 +53,54 @@ public record Quat(double x, double y, double z, double w) {
         return new Quat((m02 + m20) / s, (m12 + m21) / s, 0.25 * s, (m10 - m01) / s);
     }
 
+    /** Hamilton product: the rotation {@code this} followed by {@code other}. */
+    public Quat mul(Quat other) {
+        return new Quat(
+                w * other.x + x * other.w + y * other.z - z * other.y,
+                w * other.y - x * other.z + y * other.w + z * other.x,
+                w * other.z + x * other.y - y * other.x + z * other.w,
+                w * other.w - x * other.x - y * other.y - z * other.z);
+    }
+
+    public Quat conjugate() {
+        return new Quat(-x, -y, -z, w);
+    }
+
+    public double length() {
+        return Math.sqrt(x * x + y * y + z * z + w * w);
+    }
+
+    /** Renormalises the quaternion; a degenerate one becomes the identity. */
+    public Quat normalized() {
+        double length = length();
+        if (!(length > 1.0e-9)) {
+            return IDENTITY;
+        }
+        return new Quat(x / length, y / length, z / length, w / length);
+    }
+
+    /**
+     * Shortest rotation vector turning {@code from} into {@code to}, in radians, world frame.
+     *
+     * <p>Used as the orientation error of a rail controller: the vector's direction is the axis the
+     * body has to turn about and its length is the angle. The double cover of the quaternion group
+     * is handled by flipping the sign when {@code w} is negative, so the result is always the
+     * shorter of the two rotations.</p>
+     */
+    public static Point3 rotationError(Quat from, Quat to) {
+        Quat delta = to.normalized().mul(from.normalized().conjugate());
+        if (delta.w < 0.0) {
+            delta = new Quat(-delta.x, -delta.y, -delta.z, -delta.w);
+        }
+        double sinHalf = Math.sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z);
+        if (sinHalf < 1.0e-9) {
+            return Point3.ZERO;
+        }
+        double angle = 2.0 * Math.atan2(sinHalf, Math.max(1.0e-9, delta.w));
+        double scale = angle / sinHalf;
+        return new Point3(delta.x * scale, delta.y * scale, delta.z * scale);
+    }
+
     /** Angle between the body's local up axis and the world up axis, in degrees. */
     public double tiltDegrees() {
         Point3 localUp = rotate(Point3.UP);

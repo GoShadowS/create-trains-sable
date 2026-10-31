@@ -55,6 +55,11 @@ public final class SablePhysicsBackend implements PhysicsBackend {
     }
 
     @Override
+    public boolean supportsForces() {
+        return true;
+    }
+
+    @Override
     public String description() {
         return "Sable / Rapier (server authoritative, Sable pose sync)";
     }
@@ -115,6 +120,8 @@ public final class SablePhysicsBackend implements PhysicsBackend {
         private final Tuning tuning;
         private MassProperties massProfile;
         private boolean drivenByTrain;
+        private final Vector3d queuedForce = new Vector3d();
+        private final Vector3d queuedTorque = new Vector3d();
 
         private SableBody(ServerSubLevel subLevel, MassProperties massProfile, Tuning tuning) {
             this.subLevel = subLevel;
@@ -160,23 +167,15 @@ public final class SablePhysicsBackend implements PhysicsBackend {
         }
 
         /**
-         * Kinematic follow. Rapier keeps the body awake but its momentum is cancelled every tick,
-         * so the sub-level tracks the carriage exactly instead of drifting off on its own.
+         * Rail forces for a running train. They are queued here and applied on every physics substep
+         * as an impulse, then cleared: Sable runs several substeps per tick and would otherwise apply
+         * a whole tick's worth of force at once, which is what makes a light carriage oscillate.
          */
         @Override
-        public void follow(Pose pose) {
-            RigidBodyHandle handle = RigidBodyHandle.of(subLevel);
-            if (handle == null || !handle.isValid()) {
-                return;
-            }
-            drivenByTrain = true;
-            Vector3d linear = handle.getLinearVelocity(new Vector3d());
-            Vector3d angular = handle.getAngularVelocity(new Vector3d());
-            handle.addLinearAndAngularVelocity(linear.negate(), angular.negate());
-            handle.teleport(
-                    new Vector3d(pose.position().x(), pose.position().y(), pose.position().z()),
-                    new Quaterniond(pose.orientation().x(), pose.orientation().y(),
-                            pose.orientation().z(), pose.orientation().w()));
+        public void drive(Point3 force, Point3 torque) {
+            drivenByTrain = false;
+            queuedForce.set(force.x(), force.y(), force.z());
+            queuedTorque.set(torque.x(), torque.y(), torque.z());
         }
 
         @Override
@@ -214,18 +213,56 @@ public final class SablePhysicsBackend implements PhysicsBackend {
             if (handle == null || !handle.isValid()) {
                 return;
             }
+
+            // Rail forces are applied at the centre of mass, so no plot-space conversion is needed:
+            // Sable takes world-space vectors here and applies them to the body origin.
+            if (queuedForce.lengthSquared() > 0.0 || queuedTorque.lengthSquared() > 0.0) {
+                handle.applyLinearAndAngularImpulse(
+                        new Vector3d(queuedForce).mul(timeStep),
+                        new Vector3d(queuedTorque).mul(timeStep));
+                queuedForce.set(0.0);
+                queuedTorque.set(0.0);
+            }
+
             Vector3d velocity = handle.getLinearVelocity(new Vector3d());
             double speed = velocity.length();
             if (speed < 1.0e-4) {
                 return;
             }
 
-            double rolling = TractionModel.rollingResistanceForce(massProfile.mass(), speed, tuning);
+            double rolling = TractionModel.rollingResistanceForce(massProfile.mass(), speed,
+                    tuning);
             TractionModel.Result brake = TractionModel.evaluate(
                     new TractionModel.Demand(0.0, 1.0, speed, massProfile.mass()), tuning);
             double signedForce = rolling + brake.force();
             Vector3d impulse = new Vector3d(velocity).normalize().mul(signedForce * timeStep);
             handle.applyLinearAndAngularImpulse(impulse, new Vector3d());
+        }
+
+        /**
+         * Kinematic fallback: the body is moved by hand. Only used when the server disables
+         * physical rails, because it cancels momentum and therefore cannot derail.
+         */
+        @Override
+        public void follow(Pose pose) {
+            drivenByTrain = true;
+            releaseQueuedForces();
+            RigidBodyHandle handle = RigidBodyHandle.of(subLevel);
+            if (handle == null || !handle.isValid()) {
+                return;
+            }
+            Vector3d linear = handle.getLinearVelocity(new Vector3d());
+            Vector3d angular = handle.getAngularVelocity(new Vector3d());
+            handle.addLinearAndAngularVelocity(linear.negate(), angular.negate());
+            handle.teleport(
+                    new Vector3d(pose.position().x(), pose.position().y(), pose.position().z()),
+                    new Quaterniond(pose.orientation().x(), pose.orientation().y(),
+                            pose.orientation().z(), pose.orientation().w()));
+        }
+
+        private void releaseQueuedForces() {
+            queuedForce.set(0.0);
+            queuedTorque.set(0.0);
         }
     }
 }

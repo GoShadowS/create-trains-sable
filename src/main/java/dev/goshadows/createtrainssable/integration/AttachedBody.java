@@ -25,6 +25,18 @@ public interface AttachedBody {
      */
     void follow(Pose pose);
 
+    /**
+     * Applies the forces that hold a running train on its rails.
+     *
+     * <p>Unlike {@link #follow(Pose)} this never moves the body: it only pushes and turns it, so a
+     * collision or an overloaded curve can win against the rails. The backend spreads the force
+     * over its substeps; callers supply new values once per game tick.</p>
+     *
+     * @param force  force at the centre of mass, world space
+     * @param torque torque about the centre of mass, world space
+     */
+    void drive(Point3 force, Point3 torque);
+
     /** Hands the body to the physics engine with the train's momentum. */
     void launch(Point3 linearVelocity);
 

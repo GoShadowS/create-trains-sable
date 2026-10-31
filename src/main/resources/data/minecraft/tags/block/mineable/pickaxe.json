@@ -1,0 +1,8 @@
+{
+  "replace": false,
+  "values": [
+    "createtrainssable:traction_truck",
+    "createtrainssable:rolling_truck",
+    "createtrainssable:spring_coupling"
+  ]
+}

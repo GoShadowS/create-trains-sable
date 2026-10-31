@@ -12,5 +12,9 @@
   "itemGroup.createtrainssable.main": "Create Trains Sable",
   "block.createtrainssable.traction_truck": "Traction Truck",
   "block.createtrainssable.rolling_truck": "Rolling Truck",
-  "block.createtrainssable.spring_coupling": "Spring Coupling"
+  "block.createtrainssable.spring_coupling": "Spring Coupling",
+  "createtrainssable.configuration.rails": "Rails",
+  "createtrainssable.configuration.rails.tooltip": "Holding a body on the track graph and coupling legacy trains.",
+  "createtrainssable.configuration.trucks": "Trucks and couplings",
+  "createtrainssable.configuration.trucks.tooltip": "Traction, guidance, derailment limits and spring couplings of the rail blocks."
 }

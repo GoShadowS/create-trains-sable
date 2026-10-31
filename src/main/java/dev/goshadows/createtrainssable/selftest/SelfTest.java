@@ -589,9 +589,15 @@ public final class SelfTest {
         /** Speed the train asks for, in blocks per tick: 0.08 * 20 = 1.6 m/s. */
         private static final double COMMAND = 0.08;
 
-        /** X of the two axles the rig puts under the deck. */
-        private static final double LEADING_AXLE = 2001.0;
-        private static final double TRAILING_AXLE = 2003.0;
+        /**
+         * X of the two axles the rig puts under the deck.
+         *
+         * <p>A truck's axle sits in the middle of its block, so the leading axle is at 2001.5 and the
+         * trailing one at 2003.5. The carriage's bogeys are put on the same two x, which makes the
+         * reported anchor gap a real check instead of a constant half-block offset.</p>
+         */
+        private static final double LEADING_AXLE = 2001.5;
+        private static final double TRAILING_AXLE = 2003.5;
 
         private static final double TARGET_METRES_PER_SECOND = COMMAND * CarriageBody.TICKS_PER_SECOND;
 
@@ -604,6 +610,7 @@ public final class SelfTest {
         private double lateralMax;
         private double anchorGap = Double.NaN;
         private int riseTick = -1;
+        private final List<Double> speeds = new ArrayList<>();
 
         BridgeScenario() {
             super("bridge", 220, 2376);
@@ -636,8 +643,7 @@ public final class SelfTest {
                     rig.railPoint(LEADING_AXLE + 1.0), rig.railPoint(LEADING_AXLE - 1.0));
             CarriageBogey trailing = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
                     rig.railPoint(TRAILING_AXLE - 1.0), rig.railPoint(TRAILING_AXLE + 1.0));
-            Carriage carriage = new Carriage(leading, trailing,
-                    (int) Math.round(TRAILING_AXLE - LEADING_AXLE));
+            Carriage carriage = new Carriage(leading, trailing, 2);
             train = new Train(UUID.randomUUID(), UUID.randomUUID(), graph,
                     new ArrayList<>(List.of(carriage)), new ArrayList<>(), true, 0);
             train.targetSpeed = COMMAND;
@@ -659,11 +665,9 @@ public final class SelfTest {
             train.approachTargetSpeed(1.0f);
 
             speed = bridged.measuredSpeed();
+            speeds.add(speed);
             peak = Math.max(peak, Math.abs(speed));
             lateralMax = Math.max(lateralMax, rig.lateralError());
-            if (riseTick < 0 && speed >= 0.95 * TARGET_METRES_PER_SECOND) {
-                riseTick = ticks;
-            }
             if (ticks % 20 == 0) {
                 log("body=" + f(rig.centre().x() - startCentre)
                         + " train=" + f(bridged.travelToDate())
@@ -683,6 +687,7 @@ public final class SelfTest {
             }
             travelledBody = rig.centre().x() - startCentre;
             anchorGap = anchorGap();
+            riseTick = rampTicks();
             if (Create.RAILWAYS.trains.get(train.id) != train) {
                 fail("the train is no longer in Create's railway manager");
                 return;
@@ -714,11 +719,31 @@ public final class SelfTest {
                 fail("an axle left the gauge: lateral=" + f(lateralMax));
                 return;
             }
-            if (!(anchorGap <= 1.0)) {
+            if (!(anchorGap <= 0.5)) {
                 fail("the carriage anchor is " + f(anchorGap) + " blocks away from the leading axle");
                 return;
             }
             pass();
+        }
+
+        /**
+         * Ticks the body needed to reach nine tenths of its final speed.
+         *
+         * <p>A body dragged along by the train would be at full speed on the first tick. This number
+         * is the time the wheels needed, and it is measured against the speed the body ended at
+         * rather than against the order, because the idling axle means the two never quite meet.</p>
+         */
+        private int rampTicks() {
+            double settled = Math.abs(speed);
+            if (settled < 1.0e-3) {
+                return -1;
+            }
+            for (int i = 0; i < speeds.size(); i++) {
+                if (Math.abs(speeds.get(i)) >= 0.9 * settled) {
+                    return i + 1;
+                }
+            }
+            return -1;
         }
 
         /** Horizontal distance between the carriage's leading anchor and the nearest axle. */

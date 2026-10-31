@@ -46,7 +46,9 @@ public final class DerailmentController {
 
     public void tick(ServerLevel level, boolean trainsTickHere) {
         Tuning tuning = CTSConfig.snapshot();
-        if (!tuning.general().enabled()) {
+        if (!tuning.general().enabled() || !CTSConfig.convertTrains()) {
+            // The physics bogey system needs no train conversion at all, so the old path is off by
+            // default. Structures left over from a world that used it are released, not leaked.
             releaseAll(ReleaseReason.ABANDON);
             return;
         }

@@ -9,9 +9,9 @@ version = "0.1.0"
 displayName = "Create Trains Sable"
 authors = "GoShadowS"
 description = '''
-Adds Sable/Rapier rigid-body physics to Create trains: mass, wheel adhesion,
-collisions and physical derailment, with a hand-off back to the TrackGraph
-once a wreck has settled on a straight piece of track.
+Physics bogeys that put a Sable vehicle on Create rails: adhesion-limited
+traction and braking, real curves, derailment when the flange limit is
+exceeded, and automatic couplers between vehicles.
 '''
 
 [[mixins]]
@@ -38,11 +38,11 @@ versionRange = "[6.0.10,6.1.0)"
 ordering = "AFTER"
 side = "BOTH"
 
-# Optional on purpose: a required dependency would crash the game without Sable and
-# make the documented degraded mode impossible. BackendLoader checks this at runtime.
+# Required since the physics bogeys: a bogey is a block entity that Sable ticks on a
+# sub-level, so the classes cannot even load without it.
 [[dependencies.createtrainssable]]
 modId = "sable"
-type = "optional"
+type = "required"
 versionRange = "[2.0.0,3.0.0)"
 ordering = "AFTER"
 side = "BOTH"
@@ -57,8 +57,8 @@ side = "BOTH"
 
 [[dependencies.createtrainssable]]
 modId = "aeronautics"
-type = "optional"
-versionRange = "[0,)"
+type = "required"
+versionRange = "[1.3.0,)"
 ordering = "AFTER"
 side = "BOTH"
 

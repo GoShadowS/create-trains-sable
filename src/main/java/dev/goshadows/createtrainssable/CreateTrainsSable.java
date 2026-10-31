@@ -1,6 +1,10 @@
 package dev.goshadows.createtrainssable;
 
 import com.mojang.logging.LogUtils;
+import dev.goshadows.createtrainssable.bogey.CTSBlockEntities;
+import dev.goshadows.createtrainssable.bogey.CTSBlocks;
+import dev.goshadows.createtrainssable.bogey.CTSCreativeTab;
+import dev.goshadows.createtrainssable.bogey.CTSItems;
 import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.derailment.DerailmentController;
 import dev.goshadows.createtrainssable.integration.BackendLoader;
@@ -20,6 +24,10 @@ public final class CreateTrainsSable {
     private static volatile DerailmentController controller;
 
     public CreateTrainsSable(IEventBus modBus, ModContainer modContainer) {
+        CTSBlocks.register(modBus);
+        CTSBlockEntities.register(modBus);
+        CTSItems.register(modBus);
+        CTSCreativeTab.register(modBus);
         modContainer.registerConfig(ModConfig.Type.SERVER, CTSConfig.SPEC, MOD_ID + "-server.toml");
         PhysicsBackend backend = BackendLoader.load();
         controller = new DerailmentController(backend);

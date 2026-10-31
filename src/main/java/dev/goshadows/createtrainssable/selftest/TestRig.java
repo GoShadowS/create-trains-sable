@@ -250,10 +250,23 @@ final class TestRig {
         Create.RAILWAYS.removeGraph(graph);
     }
 
-    /** Yaw of the body in degrees; a body that is turning instead of moving shows up here. */
-    double yawDegrees() {
+    /** Yaw, pitch and roll of the body in degrees, in that order. */
+    String attitude() {
         Vector3d euler = body.logicalPose().orientation().getEulerAnglesYXZ(new Vector3d());
-        return Math.toDegrees(euler.y);
+        return String.format(java.util.Locale.ROOT, "%.1f/%.1f/%.1f",
+                Math.toDegrees(euler.y), Math.toDegrees(euler.x), Math.toDegrees(euler.z));
+    }
+
+    /** Lateral and vertical position of every axle, for a body that may be turning rather than drifting. */
+    String axleDetails() {
+        StringBuilder builder = new StringBuilder();
+        for (Vec axle : axles()) {
+            if (builder.length() > 0) {
+                builder.append(' ');
+            }
+            builder.append(String.format(java.util.Locale.ROOT, "z=%.2f y=%.2f", axle.z(), axle.y()));
+        }
+        return builder.toString();
     }
 
     /** Force the first truck asked for on its last physics tick. */

@@ -56,32 +56,15 @@ dependencies {
     implementation("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}") { transitive = false }
     implementation("com.tterrag.registrate:Registrate:${registrate_version}") { transitive = false }
     compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
-    // Mixin annotations come from the same artifact NeoForge 21.1.228 ships at
-    // runtime. The org.spongepowered coordinates do not publish this version.
-    compileOnly("net.fabricmc:sponge-mixin:${mixin_version}") { transitive = false }
     localRuntime("dev.engine-room.flywheel:flywheel-neoforge-${minecraft_version}:${flywheel_version}")
 
-    // Sable Companion is bundled. Sable replaces its service implementation at
-    // runtime when the full mod is installed; the default one is a safe no-op.
-    jarJar(api("dev.ryanhcode.sable-companion:sable-companion-common-${minecraft_version}:[${sable_companion_version},)")) {
-        version {
-            prefer(sable_companion_version)
-        }
-    }
-
-    // The backend class is only ever loaded through BackendLoader, so Sable is
-    // a compile-time convenience here and an optional runtime dependency.
+    // Sable is a hard dependency: the trucks are block entities that Sable ticks on a sub-level,
+    // so nothing in the rail package can even load without it.
     compileOnly("dev.ryanhcode.sable:sable-common-${minecraft_version}:${sable_version}") { transitive = false }
     localRuntime("dev.ryanhcode.sable:sable-neoforge-${minecraft_version}:${sable_version}") {
         exclude group: 'com.simibubi.create'
         exclude group: 'dev.ryanhcode.sable-companion'
     }
-
-    // Create: Aeronautics (needs Sable) is the reference implementation of a Sable structure that
-    // players already build against, so the compatibility code is compiled against it. It is
-    // never bundled and never a hard dependency: the mod runs with plain Create as well.
-    compileOnly("maven.modrinth:create-aeronautics:${aeronautics_version}") { transitive = false }
-    localRuntime("maven.modrinth:create-aeronautics:${aeronautics_version}") { transitive = false }
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

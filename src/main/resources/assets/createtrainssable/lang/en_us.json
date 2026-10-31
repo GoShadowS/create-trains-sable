@@ -1,20 +1,12 @@
 {
-  "createtrainssable.configuration.general": "General",
-  "createtrainssable.configuration.general.tooltip": "Global switches for the physics hand-off.",
-  "createtrainssable.configuration.traction": "Wheel contact",
-  "createtrainssable.configuration.traction.tooltip": "Mass estimates, adhesion and braking.",
-  "createtrainssable.configuration.derailment": "Derailment",
-  "createtrainssable.configuration.derailment.tooltip": "Curve, impact and braking thresholds.",
-  "createtrainssable.configuration.rebinding": "Rebinding",
-  "createtrainssable.configuration.rebinding.tooltip": "When a wreck may return to the track graph.",
-  "createtrainssable.configuration.debug": "Debug",
-  "createtrainssable.configuration.debug.tooltip": "Body pose logging.",
+  "createtrainssable.configuration.trucks": "Trucks",
+  "createtrainssable.configuration.trucks.tooltip": "Wheel/rail contact: traction, adhesion, guidance and the limits that make a derailment.",
+  "createtrainssable.configuration.couplings": "Couplings",
+  "createtrainssable.configuration.couplings.tooltip": "Spring couplings between vehicles.",
+  "createtrainssable.configuration.debug": "Diagnostics",
+  "createtrainssable.configuration.debug.tooltip": "Logging of the state of every axle.",
   "itemGroup.createtrainssable.main": "Create Trains Sable",
   "block.createtrainssable.traction_truck": "Traction Truck",
   "block.createtrainssable.rolling_truck": "Rolling Truck",
-  "block.createtrainssable.spring_coupling": "Spring Coupling",
-  "createtrainssable.configuration.rails": "Rails",
-  "createtrainssable.configuration.rails.tooltip": "Holding a body on the track graph and coupling legacy trains.",
-  "createtrainssable.configuration.trucks": "Trucks and couplings",
-  "createtrainssable.configuration.trucks.tooltip": "Traction, guidance, derailment limits and spring couplings of the rail blocks."
+  "block.createtrainssable.spring_coupling": "Spring Coupling"
 }

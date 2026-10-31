@@ -132,32 +132,24 @@ def truck_frame():
 
 
 def truck_wheel():
-    """A wheel bolted to the frame side: black tyre, bright rim, brass axle nut."""
+    """A wheel seen from the side: black tyre, bright flange, steel face, brass axle nut."""
     px = canvas()
-    rect(px, 0, 0, SIZE - 1, SIZE - 1, STEEL_DARK)
-    grain(px, 6, RUST_DARK)
-    hline(px, 0, 0, SIZE - 1, STEEL)
-
-    disc(px, 8.0, 8.0, 7.0, RUST_DARK)
-    disc(px, 8.0, 8.0, 6.4, BLACK)
-    ring(px, 8.0, 8.0, 5.4, 6.4, TYRE)
-    ring(px, 8.0, 8.0, 4.2, 5.4, STEEL)
-    ring(px, 8.0, 8.0, 3.6, 4.2, STEEL_LIGHT)
-    disc(px, 8.0, 8.0, 3.6, RUST_DARK)
-
-    for x in range(SIZE):
-        for y in range(SIZE):
-            dx, dy = x + 0.5 - 8.0, y + 0.5 - 8.0
-            distance = dx * dx + dy * dy
-            if 5.4 * 5.4 <= distance <= 6.4 * 6.4 and dx + dy < -0.5:
-                put(px, x, y, TYRE_HI)
-
-    for step_x, step_y in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-        for step in range(1, 4):
-            put(px, 8 + step_x * step, 8 + step_y * step, STEEL_LIGHT)
-    disc(px, 8.0, 8.0, 1.8, BRASS)
-    put(px, 8, 8, BRASS_HI)
-    put(px, 9, 9, BRASS_DARK)
+    rect(px, 0, 0, SIZE - 1, SIZE - 1, TYRE)
+    # Flange: the bright ring that actually touches the rail.
+    ring(px, 8.0, 8.0, 5.6, 7.4, STEEL_LIGHT)
+    ring(px, 8.0, 8.0, 7.4, 8.6, STEEL)
+    # Steel face inside the flange, darker than the flange so the ring reads.
+    disc(px, 8.0, 8.0, 5.6, STEEL_DARK)
+    # Four spokes.
+    for step in range(-4, 5):
+        put(px, 8 + step, 8, STEEL_MID)
+        put(px, 8, 8 + step, STEEL_MID)
+    # Hub with the axle nut.
+    disc(px, 8.0, 8.0, 2.2, STEEL)
+    ring(px, 8.0, 8.0, 1.4, 2.2, STEEL_HI)
+    put(px, 8, 8, BRASS)
+    put(px, 8, 7, BRASS_HI)
+    put(px, 7, 8, BRASS_DARK)
     return px
 
 

@@ -1,4 +1,4 @@
-package dev.goshadows.createtrainssable.bogey;
+package dev.goshadows.createtrainssable.rail;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -16,20 +16,20 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import javax.annotation.Nullable;
 
 /**
- * A coupler between two Sable vehicles.
+ * A spring coupling between two Sable vehicles.
  *
- * <p>Two couplers facing each other within a couple of blocks form a link on their own: the vehicles
- * are then pulled and pushed by a spring and a damper, so a locomotive actually drags its wagons and
- * a collision at the back of the train is felt at the front. Unlike a rigid joint this is forgiving -
- * it stretches under load and settles, which is what a real screw coupling does.</p>
+ * <p>Two couplings facing each other within a couple of blocks hook up on their own: the vehicles are
+ * then pulled and pushed by a spring and a damper, so a locomotive actually drags its wagons and a
+ * shunt at the back of the train is felt at the front. Unlike a rigid joint this is forgiving - it
+ * stretches under load and settles, which is what a real screw coupling does.</p>
  */
-public class AutomaticCouplerBlock extends HorizontalDirectionalBlock {
+public class SpringCouplingBlock extends HorizontalDirectionalBlock {
 
     public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
 
-    private static final VoxelShape SHAPE = Block.box(4.0, 2.0, 4.0, 12.0, 10.0, 12.0);
+    private static final VoxelShape SHAPE = Block.box(4.0, 1.0, 3.0, 12.0, 9.0, 13.0);
 
-    public AutomaticCouplerBlock(Properties properties) {
+    public SpringCouplingBlock(Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
     }
@@ -54,6 +54,6 @@ public class AutomaticCouplerBlock extends HorizontalDirectionalBlock {
     @Nullable
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new AutomaticCouplerBlockEntity(pos, state);
+        return new SpringCouplingBlockEntity(pos, state);
     }
 }

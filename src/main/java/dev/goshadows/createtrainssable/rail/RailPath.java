@@ -1,4 +1,4 @@
-package dev.goshadows.createtrainssable.bogey;
+package dev.goshadows.createtrainssable.rail;
 
 import com.simibubi.create.Create;
 import com.simibubi.create.content.trains.graph.TrackEdge;
@@ -12,16 +12,16 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The piece of Create track a bogey is currently riding on.
+ * The piece of Create track a truck is currently riding on.
  *
  * <p>A physics vehicle does not follow the track because something moves it along a spline, it
  * follows the track because there is a rail under each axle and the axle is held onto it. To hold it
  * on, the mod has to know where the rail is: this finds the nearest edge of Create's
- * {@code TrackGraph}, with the tangent and the normal at that exact point. Straight track and a
- * curved {@code BezierConnection} are handled by the same code because
+ * {@code TrackGraph}, with the tangent and the normal at that exact point, and the curvature there.
+ * Straight track and a curved {@code BezierConnection} are handled by the same code because
  * {@link TrackEdge#getPosition} and {@link TrackEdge#getNormal} already know about turns.</p>
  */
-public record BogeyTrack(TrackGraph graph, TrackEdge edge, double t, Vec3 position, Vec3 tangent,
+public record RailPath(TrackGraph graph, TrackEdge edge, double t, Vec3 position, Vec3 tangent,
                          Vec3 normal, Vec3 lateral, double distance, double curvature) {
 
     /** Samples used per edge when looking for the closest point. */
@@ -32,9 +32,9 @@ public record BogeyTrack(TrackGraph graph, TrackEdge edge, double t, Vec3 positi
      * @param maxDistance how far from a rail the axle may be and still be considered on it
      * @param scanRadius  how far away to look for track nodes before giving up
      */
-    public static Optional<BogeyTrack> nearest(ServerLevel level, Vec3 probe, double maxDistance,
+    public static Optional<RailPath> nearest(ServerLevel level, Vec3 probe, double maxDistance,
                                                double scanRadius) {
-        BogeyTrack best = null;
+        RailPath best = null;
         double bestDistance = maxDistance * maxDistance;
         double nodeRange = scanRadius * scanRadius;
 
@@ -62,7 +62,7 @@ public record BogeyTrack(TrackGraph graph, TrackEdge edge, double t, Vec3 positi
                     if (edge.node1.getNetId() > edge.node2.getNetId()) {
                         continue;
                     }
-                    BogeyTrack candidate = sample(graph, edge, probe);
+                    RailPath candidate = sample(graph, edge, probe);
                     if (candidate != null && candidate.distance() < bestDistance) {
                         bestDistance = candidate.distance();
                         best = candidate;
@@ -73,7 +73,7 @@ public record BogeyTrack(TrackGraph graph, TrackEdge edge, double t, Vec3 positi
         return Optional.ofNullable(best);
     }
 
-    private static BogeyTrack sample(TrackGraph graph, TrackEdge edge, Vec3 probe) {
+    private static RailPath sample(TrackGraph graph, TrackEdge edge, Vec3 probe) {
         double bestT = 0.0;
         double bestDistance = Double.MAX_VALUE;
         Vec3 bestPosition = null;
@@ -122,7 +122,7 @@ public record BogeyTrack(TrackGraph graph, TrackEdge edge, double t, Vec3 positi
         }
         lateral = lateral.normalize();
 
-        return new BogeyTrack(graph, edge, bestT, bestPosition, tangent, normal, lateral,
+        return new RailPath(graph, edge, bestT, bestPosition, tangent, normal, lateral,
                 Math.sqrt(bestDistance), curvature(graph, edge, bestT));
     }
 

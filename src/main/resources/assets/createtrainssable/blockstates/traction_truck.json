@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "createtrainssable:block/traction_truck",
+      "y": 0
+    },
+    "facing=east": {
+      "model": "createtrainssable:block/traction_truck",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "createtrainssable:block/traction_truck",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "createtrainssable:block/traction_truck",
+      "y": 270
+    }
+  }
+}

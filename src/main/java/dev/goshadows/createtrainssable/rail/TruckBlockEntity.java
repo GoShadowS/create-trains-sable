@@ -1,4 +1,4 @@
-package dev.goshadows.createtrainssable.bogey;
+package dev.goshadows.createtrainssable.rail;
 
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -14,40 +14,41 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
- * The physics of one bogey: find the rail under it, hold the axle on that rail, and pull the
+ * The physics of one rail truck: find the rail under the axle, hold the axle on it, and pull the
  * vehicle along it with as much force as the wheels have grip for.
  *
- * <p>Everything here runs on Sable's physics substeps, not on the game tick, and everything is
- * applied as a change in velocity. That makes the model mass independent - a heavy train is not
- * slower than a light one, it is just as fast - and it means the body is never teleported, so a
- * collision, a too fast curve or a wall the train runs into all behave the way the engine says they
- * should. Losing the rail is not an event this class raises; it is what happens when the guidance
- * stops being applied because the axle is no longer over a rail.</p>
+ * <p>Everything runs on Sable's physics substeps, not on the game tick, and everything is applied as
+ * a change in velocity. That makes the model mass independent - a heavy train is not slower than a
+ * light one - and it means the body is never teleported, so a collision, a curve taken too fast or a
+ * wall the train runs into all behave the way the engine says they should. Leaving the rail is not an
+ * event this class raises; it is what happens when guidance stops being applied because the axle is
+ * no longer over a rail.</p>
  */
-public class PhysicsBogeyBlockEntity extends KineticBlockEntity implements BlockEntitySubLevelActor {
+public class TruckBlockEntity extends KineticBlockEntity implements BlockEntitySubLevelActor {
 
-    /** Highest speed the bogey's own wheels are allowed to command, in m/s. */
+    /** Highest speed a driving truck is allowed to command, in m/s. */
     private static final double HARD_SPEED_CAP = 60.0;
 
-    private BogeyTrack track;
-    private long trackStamp = Long.MIN_VALUE;
+    private RailPath rail;
+    private long railStamp = Long.MIN_VALUE;
     private boolean reportedDerailment;
     private Vec3 lastVelocity = Vec3.ZERO;
 
-    public PhysicsBogeyBlockEntity(BlockPos pos, BlockState state) {
-        super(CTSBlockEntities.PHYSICS_BOGEY.get(), pos, state);
+    public TruckBlockEntity(BlockPos pos, BlockState state) {
+        super(CTSBlockEntities.TRUCK.get(), pos, state);
     }
 
     public boolean isPowered() {
-        return getBlockState().getBlock() instanceof PhysicsBogeyBlock bogey && bogey.isPowered();
+        return getBlockState().getBlock() instanceof TruckBlock truck && truck.isDriven();
     }
 
     @Override
-    public void addBehaviours(java.util.List<BlockEntityBehaviour> behaviours) {
-        // No behaviours: this block is a wheel, not a machine with a GUI.
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        // None: a truck is a wheel, not a machine with a menu.
     }
 
     @Override
@@ -55,52 +56,50 @@ public class PhysicsBogeyBlockEntity extends KineticBlockEntity implements Block
         if (level == null || level.isClientSide()) {
             return;
         }
-        BogeySettings settings = CTSConfig.bogey();
+        TruckSettings settings = CTSConfig.trucks();
         Vec3 axle = axlePosition(subLevel);
-        if (axle == null) {
-            return;
-        }
 
-        track = refreshTrack(subLevel, axle, settings);
+        rail = refreshRail(subLevel, axle, settings);
 
         Vector3dc rawVelocity = handle.getLinearVelocity(new Vector3d());
         Vec3 velocity = new Vec3(rawVelocity.x(), rawVelocity.y(), rawVelocity.z());
         lastVelocity = velocity;
 
         double targetSpeed = targetSpeed();
-        int bogeys = countBogeys(subLevel);
-        int powered = countPoweredBogeys(subLevel);
+        int trucks = countTrucks(subLevel);
+        int driven = countDrivenTrucks(subLevel);
         Vec3 deltaVelocity = Vec3.ZERO;
         Vec3 deltaAngular = Vec3.ZERO;
 
-        if (track != null) {
-            double lateral = track.lateralError(axle);
-            double vertical = track.verticalError(axle);
-            double speed = track.speedAlong(velocity);
+        if (rail != null) {
+            double lateral = rail.lateralError(axle);
+            double vertical = rail.verticalError(axle);
+            double speed = rail.speedAlong(velocity);
 
             boolean offRail = Math.abs(lateral) > settings.maxLateralError()
                     || Math.abs(vertical) > settings.maxVerticalError();
-            boolean tooFast = track.isOverspeed(Math.abs(speed), settings.curveLateralLimit());
+            boolean tooFast = rail.isOverspeed(Math.abs(speed), settings.curveLateralLimit());
 
             if (offRail || tooFast) {
-                // The wheels are not on the rail any more, or the curve cannot hold the vehicle.
+                // The axle is not on the rail any more, or the curve cannot hold the vehicle.
                 // Guidance simply stops; the body keeps its momentum and becomes a wreck.
                 if (!reportedDerailment) {
                     reportedDerailment = true;
                     CreateTrainsSable.LOGGER.info(
-                            "Bogey at {} left the rails: lateral={}, vertical={}, speed={}, curvature={}",
+                            "Rail truck at {} left the rails: lateral={}, vertical={}, speed={}, "
+                                    + "curvature={}",
                             worldPosition, String.format("%.2f", lateral),
                             String.format("%.2f", vertical), String.format("%.2f", speed),
-                            String.format("%.4f", track.curvature()));
+                            String.format("%.4f", rail.curvature()));
                 }
             } else {
                 reportedDerailment = false;
-                deltaVelocity = guidance(track, velocity, axle, settings, bogeys, timeStep)
-                        .add(track.tangent().scale(
-                                longitudinal(speed, targetSpeed, settings, powered) * timeStep));
-                deltaAngular = alignment(subLevel, track, handle, velocity, settings, timeStep);
+                deltaVelocity = guidance(rail, velocity, axle, settings, trucks, timeStep)
+                        .add(rail.tangent().scale(
+                                longitudinal(speed, targetSpeed, settings, driven) * timeStep));
+                deltaAngular = alignment(subLevel, rail, handle, settings, timeStep);
             }
-        } else if (reportedDerailment) {
+        } else {
             reportedDerailment = false;
         }
 
@@ -112,24 +111,24 @@ public class PhysicsBogeyBlockEntity extends KineticBlockEntity implements Block
     }
 
     /**
-     * Lateral and vertical hold, with gravity cancelled so the bogey sits on the rail head.
+     * Lateral and vertical hold, with gravity cancelled so the truck sits on the rail head.
      *
-     * <p>Gravity is divided between the bogeys of the vehicle: every bogey corrects its own axle,
-     * but the weight of the vehicle is one weight, and a vehicle with four bogeys would otherwise
-     * be pushed up four times as hard as it is pulled down.</p>
+     * <p>Gravity is divided between the trucks of the vehicle: each one corrects its own axle, but
+     * the weight of the vehicle is one weight, and a vehicle with four trucks would otherwise be
+     * pushed up four times as hard as it is pulled down.</p>
      */
-    private Vec3 guidance(BogeyTrack track, Vec3 velocity, Vec3 axle, BogeySettings settings,
-                          int bogeys, double timeStep) {
-        double lateralError = track.lateralError(axle);
-        double verticalError = track.verticalError(axle);
-        double lateralSpeed = velocity.dot(track.lateral());
-        double verticalSpeed = velocity.dot(track.normal());
+    private Vec3 guidance(RailPath rail, Vec3 velocity, Vec3 axle, TruckSettings settings,
+                          int trucks, double timeStep) {
+        double lateralError = rail.lateralError(axle);
+        double verticalError = rail.verticalError(axle);
+        double lateralSpeed = velocity.dot(rail.lateral());
+        double verticalSpeed = velocity.dot(rail.normal());
 
         double lateral = -settings.guideStiffness() * lateralError
                 - settings.guideDamping() * lateralSpeed;
         double vertical = -settings.guideStiffness() * verticalError
                 - settings.guideDamping() * verticalSpeed
-                + settings.gravity() / Math.max(1, bogeys);
+                + settings.gravity() / Math.max(1, trucks);
 
         double magnitude = Math.sqrt(lateral * lateral + vertical * vertical);
         double limit = settings.maxGuideAcceleration();
@@ -139,62 +138,61 @@ public class PhysicsBogeyBlockEntity extends KineticBlockEntity implements Block
             vertical *= scale;
         }
 
-        return track.lateral().scale(lateral * timeStep).add(track.normal().scale(vertical * timeStep));
+        return rail.lateral().scale(lateral * timeStep).add(rail.normal().scale(vertical * timeStep));
     }
 
     /**
      * Traction and braking along the rail, capped by the grip of the wheels.
      *
-     * <p>The demand is shared between the driven bogeys of the vehicle for the same reason gravity
-     * is: two motorised bogeys pull twice as hard as one, and the point of putting more bogeys under
-     * a heavy train is reliability, not doubling its acceleration.</p>
+     * <p>The demand is shared between the driving trucks of the vehicle for the same reason gravity
+     * is: two driven trucks pull twice as hard as one, and the point of putting more trucks under a
+     * heavy train is reliability, not doubling its acceleration.</p>
      */
-    private double longitudinal(double speed, double targetSpeed, BogeySettings settings,
-                                int powered) {
+    private double longitudinal(double speed, double targetSpeed, TruckSettings settings,
+                                int driven) {
         if (!isPowered()) {
-            // An unpowered bogey only rolls: rolling resistance, and the brake when it is asked to hold.
+            // A rolling truck only coasts: rolling resistance, and the brake when it is asked to hold.
             return clamp(-speed * 0.8, -settings.brakeAcceleration(), 0.0);
         }
         double difference = targetSpeed - speed;
-        double demand = difference * 4.0 / Math.max(1, powered);
+        double demand = difference * 4.0 / Math.max(1, driven);
         return clamp(demand, -settings.brakeAcceleration(), settings.tractionAcceleration());
     }
 
-    /** Bogey count of the vehicle this bogey belongs to. */
-    private static int countBogeys(ServerSubLevel subLevel) {
+    private static int countTrucks(ServerSubLevel subLevel) {
         int count = 0;
         for (BlockEntitySubLevelActor actor : subLevel.getPlot().getBlockEntityActors()) {
-            if (actor instanceof PhysicsBogeyBlockEntity) {
+            if (actor instanceof TruckBlockEntity) {
                 count++;
             }
         }
         return count;
     }
 
-    private static int countPoweredBogeys(ServerSubLevel subLevel) {
+    private static int countDrivenTrucks(ServerSubLevel subLevel) {
         int count = 0;
         for (BlockEntitySubLevelActor actor : subLevel.getPlot().getBlockEntityActors()) {
-            if (actor instanceof PhysicsBogeyBlockEntity bogey && bogey.isPowered()) {
+            if (actor instanceof TruckBlockEntity truck && truck.isPowered()) {
                 count++;
             }
         }
         return count;
     }
 
-    /** Turns the vehicle so that its facing aligns with the rail. */
-    private Vec3 alignment(ServerSubLevel subLevel, BogeyTrack track, RigidBodyHandle handle,
-                           Vec3 velocity, BogeySettings settings, double timeStep) {
-        Direction facing = getBlockState().getValue(PhysicsBogeyBlock.FACING);
-        Vector3dc normal = new Vector3d(facing.getStepX(), facing.getStepY(), facing.getStepZ());
-        Vector3d worldNormal = subLevel.logicalPose().transformNormal(normal);
+    /** Turns the vehicle so that its facing follows the rail. */
+    private Vec3 alignment(ServerSubLevel subLevel, RailPath rail, RigidBodyHandle handle,
+                           TruckSettings settings, double timeStep) {
+        Direction facing = getBlockState().getValue(TruckBlock.FACING);
+        Vector3dc local = new Vector3d(facing.getStepX(), facing.getStepY(), facing.getStepZ());
+        Vector3d worldNormal = subLevel.logicalPose().transformNormal(local);
         Vec3 forward = new Vec3(worldNormal.x(), worldNormal.y(), worldNormal.z());
         if (forward.lengthSqr() < 1.0e-8) {
             return Vec3.ZERO;
         }
         forward = forward.normalize();
 
-        double sign = forward.dot(track.tangent()) >= 0.0 ? 1.0 : -1.0;
-        Vec3 wanted = track.tangent().scale(sign);
+        double sign = forward.dot(rail.tangent()) >= 0.0 ? 1.0 : -1.0;
+        Vec3 wanted = rail.tangent().scale(sign);
         Vec3 axis = forward.cross(wanted);
 
         Vector3dc angular = handle.getAngularVelocity(new Vector3d());
@@ -212,15 +210,15 @@ public class PhysicsBogeyBlockEntity extends KineticBlockEntity implements Block
 
     /** World position of the axle, i.e. the point that has to stay on the rail. */
     private Vec3 axlePosition(ServerSubLevel subLevel) {
-        double x = worldPosition.getX() + 0.5;
-        double y = worldPosition.getY() + 0.5;
-        double z = worldPosition.getZ() + 0.5;
-        Vector3d local = new Vector3d(x, y, z);
+        Vector3d local = new Vector3d(
+                worldPosition.getX() + 0.5,
+                worldPosition.getY() + 0.25,
+                worldPosition.getZ() + 0.5);
         Vector3d world = subLevel.logicalPose().transformPosition(local, new Vector3d());
         return new Vec3(world.x(), world.y(), world.z());
     }
 
-    /** Speed the bogey tries to reach, in m/s, signed by the facing and by the rotation. */
+    /** Speed the truck tries to reach, in m/s, signed by the facing and by the rotation. */
     private double targetSpeed() {
         if (!isPowered()) {
             return 0.0;
@@ -229,33 +227,33 @@ public class PhysicsBogeyBlockEntity extends KineticBlockEntity implements Block
         if (Math.abs(rpm) < 1.0e-3) {
             return 0.0;
         }
-        Direction facing = getBlockState().getValue(PhysicsBogeyBlock.FACING);
-        double speed = rpm * CTSConfig.bogey().speedPerRpm();
+        Direction facing = getBlockState().getValue(TruckBlock.FACING);
+        double speed = rpm * CTSConfig.trucks().speedPerRpm();
         // The facing decides which way the vehicle goes when the shaft turns one way, exactly like
         // the direction of a car's wheels would.
         double sign = facing.getStepX() + facing.getStepZ() >= 0 ? 1.0 : -1.0;
         return clamp(speed * sign, -HARD_SPEED_CAP, HARD_SPEED_CAP);
     }
 
-    private BogeyTrack refreshTrack(ServerSubLevel subLevel, Vec3 axle, BogeySettings settings) {
+    private RailPath refreshRail(ServerSubLevel subLevel, Vec3 axle, TruckSettings settings) {
         long now = subLevel.getLevel().getGameTime();
-        if (track != null && now - trackStamp < settings.trackRecheckTicks()) {
-            return track;
+        if (rail != null && now - railStamp < settings.trackRecheckTicks()) {
+            return rail;
         }
-        trackStamp = now;
-        Optional<BogeyTrack> found = BogeyTrack.nearest(subLevel.getLevel(), axle,
+        railStamp = now;
+        Optional<RailPath> found = RailPath.nearest(subLevel.getLevel(), axle,
                 settings.maxLateralError() * 2.0 + 1.0, settings.scanRadius());
         return found.orElse(null);
     }
 
-    /** Last measured velocity of the vehicle, used by the coupler to damp relative motion. */
+    /** Last measured velocity of the vehicle. */
     public Vec3 lastVelocity() {
         return lastVelocity;
     }
 
     @Override
     public void invalidate() {
-        track = null;
+        rail = null;
         super.invalidate();
     }
 

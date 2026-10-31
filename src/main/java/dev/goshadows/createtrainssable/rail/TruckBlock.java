@@ -1,11 +1,11 @@
-package dev.goshadows.createtrainssable.bogey;
+package dev.goshadows.createtrainssable.rail;
 
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
@@ -15,37 +15,37 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import javax.annotation.Nullable;
 
 /**
- * A bogey: the block that puts a Sable vehicle on Create's rails.
+ * A truck: the block that puts a Sable vehicle on Create's rails.
  *
- * <p>Build the vehicle you want, put bogeys under it where the wheels should be, assemble it into a
- * Sable sub-level, and it follows Create track on its own. This is deliberately the opposite
- * approach to converting Create's trains: there is no train object, no hidden contraption and
- * nothing that can be teleported, so the vehicle is exactly what was built and it derails when the
+ * <p>Build the vehicle, put trucks where the axles belong, give the driven ones rotation and assemble
+ * the whole thing into a sub-level. There is no train object, no hidden contraption and nothing that
+ * can be teleported, so the vehicle is exactly what was built and it leaves the rails when the
  * physics says it should.</p>
  *
- * <p>Powered bogeys take rotary power on their axle axis; the speed of that rotation is the speed
- * the bogey tries to reach. Unpowered bogeys only carry weight and roll, so a train needs at least
- * one powered bogey and can have any number of unpowered ones.</p>
+ * <p>A driven truck takes rotary power on its axle axis; the speed of that rotation is the speed the
+ * vehicle tries to reach. A rolling truck carries weight, coasts and brakes. A vehicle needs at least
+ * one driven truck.</p>
  */
-public class PhysicsBogeyBlock extends HorizontalKineticBlock {
+public class TruckBlock extends HorizontalKineticBlock {
 
     public static final Property<Direction> FACING = HorizontalKineticBlock.HORIZONTAL_FACING;
 
-    private static final VoxelShape SHAPE = Block.box(0.0, 0.0, 0.0, 16.0, 12.0, 16.0);
+    private static final VoxelShape SHAPE = Block.box(0.0, 0.0, 0.0, 16.0, 11.0, 16.0);
 
-    private final boolean powered;
+    private final boolean driven;
 
-    public PhysicsBogeyBlock(Properties properties, boolean powered) {
+    public TruckBlock(Properties properties, boolean driven) {
         super(properties);
-        this.powered = powered;
+        this.driven = driven;
         registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
     }
 
-    public boolean isPowered() {
-        return powered;
+    /** True for a truck that converts rotation into motion. */
+    public boolean isDriven() {
+        return driven;
     }
 
-    /** The axle points sideways, so the shaft has to come in from the sides of the block. */
+    /** The axle runs across the vehicle, so the shaft has to come in from the sides. */
     @Override
     public Direction.Axis getRotationAxis(BlockState state) {
         return state.getValue(FACING).getClockWise().getAxis();
@@ -65,6 +65,6 @@ public class PhysicsBogeyBlock extends HorizontalKineticBlock {
     @Nullable
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new PhysicsBogeyBlockEntity(pos, state);
+        return new TruckBlockEntity(pos, state);
     }
 }

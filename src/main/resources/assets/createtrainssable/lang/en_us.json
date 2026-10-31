@@ -10,10 +10,7 @@
   "createtrainssable.configuration.debug": "Debug",
   "createtrainssable.configuration.debug.tooltip": "Body pose logging.",
   "itemGroup.createtrainssable.main": "Create Trains Sable",
-  "block.createtrainssable.physics_bogey": "Physics Bogey",
-  "block.createtrainssable.unpowered_physics_bogey": "Unpowered Physics Bogey",
-  "block.createtrainssable.automatic_coupler": "Automatic Coupler",
-  "block.createtrainssable.physics_bogey.tooltip": "Puts a Sable vehicle on Create rails. Drive it with a shaft.",
-  "block.createtrainssable.unpowered_physics_bogey.tooltip": "Carries weight and rolls; needs a powered bogey to move.",
-  "block.createtrainssable.automatic_coupler.tooltip": "Links two vehicles with a spring and a damper."
+  "block.createtrainssable.traction_truck": "Traction Truck",
+  "block.createtrainssable.rolling_truck": "Rolling Truck",
+  "block.createtrainssable.spring_coupling": "Spring Coupling"
 }

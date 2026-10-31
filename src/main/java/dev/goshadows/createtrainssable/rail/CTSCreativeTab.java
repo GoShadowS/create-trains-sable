@@ -1,4 +1,4 @@
-package dev.goshadows.createtrainssable.bogey;
+package dev.goshadows.createtrainssable.rail;
 
 import dev.goshadows.createtrainssable.CreateTrainsSable;
 import net.minecraft.core.registries.Registries;
@@ -8,7 +8,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
-/** One creative tab for the mod's own blocks. */
+/** The mod's own creative tab. */
 public final class CTSCreativeTab {
 
     public static final DeferredRegister<CreativeModeTab> TABS =
@@ -17,11 +17,11 @@ public final class CTSCreativeTab {
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> MAIN = TABS.register("main",
             () -> CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.createtrainssable.main"))
-                    .icon(() -> CTSItems.PHYSICS_BOGEY.get().getDefaultInstance())
+                    .icon(() -> CTSItems.TRACTION_TRUCK.get().getDefaultInstance())
                     .displayItems((parameters, output) -> {
-                        output.accept(CTSItems.PHYSICS_BOGEY.get());
-                        output.accept(CTSItems.UNPOWERED_PHYSICS_BOGEY.get());
-                        output.accept(CTSItems.AUTOMATIC_COUPLER.get());
+                        output.accept(CTSItems.TRACTION_TRUCK.get());
+                        output.accept(CTSItems.ROLLING_TRUCK.get());
+                        output.accept(CTSItems.SPRING_COUPLING.get());
                     })
                     .build());
 

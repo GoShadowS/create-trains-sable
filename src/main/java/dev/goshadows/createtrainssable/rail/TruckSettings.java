@@ -1,22 +1,22 @@
-package dev.goshadows.createtrainssable.bogey;
+package dev.goshadows.createtrainssable.rail;
 
 /**
- * Tuning for the physics bogeys and couplers, in the units the physics engine uses.
+ * Tuning for the rail trucks and couplings, in the units the physics engine uses.
  *
  * <p>Everything is an acceleration rather than a force on purpose: a heavier vehicle should
  * accelerate exactly like a light one, and an acceleration is what the physics pipeline can apply
  * without a mass lookup.</p>
  */
-public record BogeySettings(double speedPerRpm, double tractionAcceleration, double brakeAcceleration,
+public record TruckSettings(double speedPerRpm, double tractionAcceleration, double brakeAcceleration,
                             double guideStiffness, double guideDamping, double maxGuideAcceleration,
                             double alignGain, double alignDamping, double maxAngularAcceleration,
                             double maxLateralError, double maxVerticalError, double curveLateralLimit,
-                            double scanRadius, int trackRecheckTicks, double couplerRange,
-                            double couplerStiffness, double couplerDamping,
-                            double couplerMaxAcceleration, double gravity) {
+                            double scanRadius, int trackRecheckTicks, double couplingRange,
+                            double couplingStiffness, double couplingDamping,
+                            double couplingMaxAcceleration, double gravity) {
 
-    public static BogeySettings defaults() {
-        return new BogeySettings(
+    public static TruckSettings defaults() {
+        return new TruckSettings(
                 0.05,
                 1.2,
                 1.6,
@@ -39,8 +39,8 @@ public record BogeySettings(double speedPerRpm, double tractionAcceleration, dou
     }
 
     /** Clamps anything that would divide by zero or shake the vehicle apart. */
-    public BogeySettings validated() {
-        return new BogeySettings(
+    public TruckSettings validated() {
+        return new TruckSettings(
                 clamp(speedPerRpm, 0.0, 5.0),
                 clamp(tractionAcceleration, 0.0, 100.0),
                 clamp(brakeAcceleration, 0.0, 100.0),
@@ -55,10 +55,10 @@ public record BogeySettings(double speedPerRpm, double tractionAcceleration, dou
                 clamp(curveLateralLimit, 0.1, 100.0),
                 clamp(scanRadius, 2.0, 128.0),
                 (int) clamp(trackRecheckTicks, 1, 40),
-                clamp(couplerRange, 0.5, 16.0),
-                clamp(couplerStiffness, 0.0, 200.0),
-                clamp(couplerDamping, 0.0, 200.0),
-                clamp(couplerMaxAcceleration, 0.0, 200.0),
+                clamp(couplingRange, 0.5, 16.0),
+                clamp(couplingStiffness, 0.0, 200.0),
+                clamp(couplingDamping, 0.0, 200.0),
+                clamp(couplingMaxAcceleration, 0.0, 200.0),
                 clamp(gravity, 0.0, 50.0));
     }
 

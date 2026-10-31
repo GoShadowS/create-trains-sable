@@ -1,4 +1,4 @@
-package dev.goshadows.createtrainssable.bogey;
+package dev.goshadows.createtrainssable.rail;
 
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -20,18 +20,16 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * One end of a coupler.
+ * One half of a spring coupling.
  *
- * <p>A coupler finds its partner by looking for another coupler block a couple of blocks away,
- * facing back at it and living on a different sub-level. The distance at the moment the link is made
- * becomes the rest length, so hooking up never yanks the vehicles together.</p>
+ * <p>A coupling finds its partner by looking for another one a couple of blocks away, facing back at
+ * it and living on a different sub-level. The distance at the moment the link is made becomes the
+ * rest length, so hooking up never yanks the vehicles together.</p>
  *
- * <p>The spring is expressed in acceleration, not in force, for the same reason the bogey is: Sable
- * keeps mass in a companion type, and a mass-independent coupling is far more stable at the physics
- * rates this runs at. Both ends are pushed by the same acceleration in opposite directions, which is
- * what makes a locomotive feel its wagons.</p>
+ * <p>The spring is expressed in acceleration rather than force so that it stays stable at the physics
+ * rate Sable runs at and so that a heavy wagon is not coupled more loosely than a light one.</p>
  */
-public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements BlockEntitySubLevelActor {
+public class SpringCouplingBlockEntity extends SmartBlockEntity implements BlockEntitySubLevelActor {
 
     private static final int RELINK_INTERVAL = 20;
 
@@ -43,8 +41,8 @@ public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements Blo
     private int relinkCountdown;
     private boolean linkedReported;
 
-    public AutomaticCouplerBlockEntity(BlockPos pos, BlockState state) {
-        super(CTSBlockEntities.AUTOMATIC_COUPLER.get(), pos, state);
+    public SpringCouplingBlockEntity(BlockPos pos, BlockState state) {
+        super(CTSBlockEntities.COUPLING.get(), pos, state);
     }
 
     @Override
@@ -70,7 +68,7 @@ public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements Blo
         if (partnerPos == null) {
             return;
         }
-        if (level.getBlockEntity(partnerPos) instanceof AutomaticCouplerBlockEntity other) {
+        if (level.getBlockEntity(partnerPos) instanceof SpringCouplingBlockEntity other) {
             if (other.partnerPos != null && other.partnerPos.equals(worldPosition)) {
                 return;
             }
@@ -86,7 +84,7 @@ public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements Blo
         if (level == null || level.isClientSide()) {
             return;
         }
-        BogeySettings settings = CTSConfig.bogey();
+        TruckSettings settings = CTSConfig.trucks();
 
         if (partnerPos == null) {
             tryLink(subLevel, settings);
@@ -95,7 +93,7 @@ public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements Blo
             }
         }
 
-        if (!(level.getBlockEntity(partnerPos) instanceof AutomaticCouplerBlockEntity other)) {
+        if (!(level.getBlockEntity(partnerPos) instanceof SpringCouplingBlockEntity other)) {
             partnerPos = null;
             partnerSubLevel = null;
             restLength = -1.0;
@@ -105,8 +103,8 @@ public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements Blo
             return;
         }
 
-        Vec3 here = couplerPoint(subLevel);
-        Vec3 there = other.couplerPoint(other.containingSubLevel());
+        Vec3 here = couplingPoint(subLevel);
+        Vec3 there = other.couplingPoint(other.containingSubLevel());
         if (here == null || there == null) {
             return;
         }
@@ -126,9 +124,9 @@ public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements Blo
 
         double extension = distance - restLength;
         double closing = otherVelocity.subtract(ownVelocity).dot(axis);
-        double acceleration = extension * settings.couplerStiffness()
-                + closing * settings.couplerDamping();
-        double limit = settings.couplerMaxAcceleration();
+        double acceleration = extension * settings.couplingStiffness()
+                + closing * settings.couplingDamping();
+        double limit = settings.couplingMaxAcceleration();
         acceleration = Math.max(-limit, Math.min(limit, acceleration));
 
         // Only this end is pushed here: the partner runs the same calculation from its own physics
@@ -139,11 +137,11 @@ public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements Blo
 
     /** World position of the coupling face. */
     @Nullable
-    private Vec3 couplerPoint(@Nullable ServerSubLevel subLevel) {
+    private Vec3 couplingPoint(@Nullable ServerSubLevel subLevel) {
         if (subLevel == null) {
             return null;
         }
-        Direction facing = getBlockState().getValue(AutomaticCouplerBlock.FACING);
+        Direction facing = getBlockState().getValue(SpringCouplingBlock.FACING);
         Vector3d local = new Vector3d(
                 worldPosition.getX() + 0.5 + facing.getStepX() * 0.5,
                 worldPosition.getY() + 0.5,
@@ -170,30 +168,30 @@ public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements Blo
                 ? server : null;
     }
 
-    /** Finds a coupler facing back at this one within range, on another vehicle. */
-    private void tryLink(ServerSubLevel subLevel, BogeySettings settings) {
-        Direction facing = getBlockState().getValue(AutomaticCouplerBlock.FACING);
-        int range = (int) Math.ceil(settings.couplerRange());
+    /** Finds a coupling facing back at this one within range, on another vehicle. */
+    private void tryLink(ServerSubLevel subLevel, TruckSettings settings) {
+        Direction facing = getBlockState().getValue(SpringCouplingBlock.FACING);
+        int range = (int) Math.ceil(settings.couplingRange());
         for (BlockPos pos : BlockPos.betweenClosed(worldPosition.offset(range, 1, range),
                 worldPosition.offset(-range, -1, -range))) {
             if (pos.equals(worldPosition)) {
                 continue;
             }
-            if (!(level.getBlockEntity(pos) instanceof AutomaticCouplerBlockEntity other)) {
+            if (!(level.getBlockEntity(pos) instanceof SpringCouplingBlockEntity other)) {
                 continue;
             }
             ServerSubLevel otherSubLevel = other.containingSubLevel();
             if (otherSubLevel == null || otherSubLevel == subLevel) {
                 continue;
             }
-            Direction otherFacing = other.getBlockState().getValue(AutomaticCouplerBlock.FACING);
-            // Couplers only hook up mouth to mouth.
+            Direction otherFacing = other.getBlockState().getValue(SpringCouplingBlock.FACING);
+            // Couplings only hook up mouth to mouth.
             if (otherFacing != facing.getOpposite()) {
                 continue;
             }
-            Vec3 here = couplerPoint(subLevel);
-            Vec3 there = other.couplerPoint(otherSubLevel);
-            if (here == null || there == null || here.distanceTo(there) > settings.couplerRange()) {
+            Vec3 here = couplingPoint(subLevel);
+            Vec3 there = other.couplingPoint(otherSubLevel);
+            if (here == null || there == null || here.distanceTo(there) > settings.couplingRange()) {
                 continue;
             }
             partnerPos = pos.immutable();
@@ -205,7 +203,7 @@ public class AutomaticCouplerBlockEntity extends SmartBlockEntity implements Blo
             if (!linkedReported) {
                 linkedReported = true;
                 dev.goshadows.createtrainssable.CreateTrainsSable.LOGGER.info(
-                        "Couplers linked: {} <-> {} (rest length {})",
+                        "Couplings linked: {} <-> {} (rest length {})",
                         worldPosition, partnerPos, String.format("%.2f", restLength));
             }
             return;

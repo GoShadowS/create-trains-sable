@@ -1,14 +1,14 @@
 package dev.goshadows.createtrainssable;
 
 import com.mojang.logging.LogUtils;
-import dev.goshadows.createtrainssable.bogey.CTSBlockEntities;
-import dev.goshadows.createtrainssable.bogey.CTSBlocks;
-import dev.goshadows.createtrainssable.bogey.CTSCreativeTab;
-import dev.goshadows.createtrainssable.bogey.CTSItems;
 import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.derailment.DerailmentController;
 import dev.goshadows.createtrainssable.integration.BackendLoader;
 import dev.goshadows.createtrainssable.integration.PhysicsBackend;
+import dev.goshadows.createtrainssable.rail.CTSBlockEntities;
+import dev.goshadows.createtrainssable.rail.CTSBlocks;
+import dev.goshadows.createtrainssable.rail.CTSCreativeTab;
+import dev.goshadows.createtrainssable.rail.CTSItems;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;

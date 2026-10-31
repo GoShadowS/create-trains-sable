@@ -121,13 +121,15 @@ public final class BridgeTool {
                 + " physical vehicle(s). Its wheels decide how it moves.");
     }
 
-    /** The sub-level the clicked block belongs to, or {@code null} when it belongs to none. */
+    /**
+     * The sub-level the clicked block belongs to, or {@code null} when it belongs to none.
+     *
+     * <p>An assembled vehicle has no blocks in the world: they live in the plot, at plot
+     * coordinates, so the question "which body is this position in" is answered by asking every
+     * body whether it has an actor there.</p>
+     */
     @Nullable
     public static ServerSubLevel findBody(ServerLevel level, BlockPos pos) {
-        BlockEntity clicked = level.getBlockEntity(pos);
-        if (clicked == null) {
-            return null;
-        }
         ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
         if (container == null) {
             return null;
@@ -137,7 +139,7 @@ public final class BridgeTool {
                 continue;
             }
             for (BlockEntitySubLevelActor actor : subLevel.getPlot().getBlockEntityActors()) {
-                if (actor == clicked) {
+                if (actor instanceof BlockEntity blockEntity && blockEntity.getBlockPos().equals(pos)) {
                     return subLevel;
                 }
             }

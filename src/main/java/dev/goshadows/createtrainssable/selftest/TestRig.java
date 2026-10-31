@@ -372,8 +372,17 @@ final class TestRig {
         return body.isRemoved();
     }
 
-    /** A block of this vehicle, for a tool that has to be handed a position. */
+    /**
+     * A block of this vehicle, for a tool that has to be handed a position.
+     *
+     * <p>After assembly the truck lives in the plot, not where it was placed, so the harness asks the
+     * block entity where it is instead of using the position it was built at - which is exactly the
+     * difference a player sees when they click a vehicle that has already been assembled.</p>
+     */
     BlockPos clickedPos() {
+        if (!trucks.isEmpty()) {
+            return trucks.get(0).getBlockPos();
+        }
         return truckPositions.isEmpty() ? BlockPos.ZERO : truckPositions.get(0);
     }
 }

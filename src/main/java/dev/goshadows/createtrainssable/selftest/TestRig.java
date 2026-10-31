@@ -3,6 +3,7 @@ package dev.goshadows.createtrainssable.selftest;
 import com.simibubi.create.Create;
 import com.simibubi.create.content.trains.graph.TrackEdge;
 import com.simibubi.create.content.trains.graph.TrackGraph;
+import com.simibubi.create.content.trains.entity.TravellingPoint;
 import com.simibubi.create.content.trains.graph.TrackNode;
 import com.simibubi.create.content.trains.graph.TrackNodeLocation;
 import com.simibubi.create.content.trains.track.BezierConnection;
@@ -67,10 +68,15 @@ final class TestRig {
     final TrackGraph graph;
     final List<TruckBlockEntity> trucks;
     final double railZ;
+    /** Y of the rail nodes: the height of the rail head. */
+    final double railY;
+    /** X of the first rail node; every node is {@link #NODE_SPACING} further east. */
+    final double railFromX;
     final int blockCount;
 
     private TestRig(ServerLevel level, ServerSubLevelContainer container, ServerSubLevel body,
-                    TrackGraph graph, List<TruckBlockEntity> trucks, double railZ, int blockCount) {
+                    TrackGraph graph, List<TruckBlockEntity> trucks, double railZ, int blockCount,
+                    double railFromX, double railY) {
         this.level = level;
         this.container = container;
         this.body = body;
@@ -78,6 +84,8 @@ final class TestRig {
         this.trucks = trucks;
         this.railZ = railZ;
         this.blockCount = blockCount;
+        this.railFromX = railFromX;
+        this.railY = railY;
     }
 
     /**
@@ -129,7 +137,8 @@ final class TestRig {
                 trucks.add(truck);
             }
         }
-        return new TestRig(level, container, body, graph, trucks, railZ, gathered.blocks().size());
+        return new TestRig(level, container, body, graph, trucks, railZ, gathered.blocks().size(),
+                x - RAIL_BEFORE, y);
     }
 
     private static void placeTruck(ServerLevel level, BlockPos pos, TruckBlock block) {
@@ -155,6 +164,35 @@ final class TestRig {
         }
         Create.RAILWAYS.putGraph(graph);
         return graph;
+    }
+
+    /**
+     * A travelling point on the synthetic rail at the given x, pointing east.
+     *
+     * <p>Used to give a carried carriage its two bogeys on the same rail the trucks ride: the point
+     * and the axle meet at the same x, so the harness can compare where the train thinks it is with
+     * where the body is.</p>
+     */
+    TravellingPoint railPoint(double x) {
+        double start = railFromX + Math.floor((x - railFromX) / NODE_SPACING) * NODE_SPACING;
+        TrackNode first = graph.locateNode(new TrackNodeLocation(start, railY, railZ).in(level.dimension()));
+        TrackNode second = graph.locateNode(
+                new TrackNodeLocation(start + NODE_SPACING, railY, railZ).in(level.dimension()));
+        if (first == null || second == null) {
+            throw new IllegalStateException("no rail node at x=" + start);
+        }
+        TrackEdge edge = graph.getConnectionsFrom(first).get(second);
+        if (edge == null) {
+            throw new IllegalStateException("no rail edge at x=" + start);
+        }
+        return new TravellingPoint(first, second, edge, x - start, false);
+    }
+
+    /** World position of the centre of mass of the body. */
+    Vec centre() {
+        Vector3dc centreOfMass = body.getMassTracker().getCenterOfMass();
+        Vector3d world = body.logicalPose().transformPosition(new Vector3d(centreOfMass), new Vector3d());
+        return new Vec(world.x(), world.y(), world.z());
     }
 
     /** The physics handle of the body, or {@code null} when the engine has none yet. */

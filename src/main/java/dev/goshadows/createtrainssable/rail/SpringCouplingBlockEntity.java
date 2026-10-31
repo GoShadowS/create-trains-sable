@@ -129,7 +129,7 @@ public class SpringCouplingBlockEntity extends SmartBlockEntity implements Block
         // Equal and opposite: what the vehicle in front gains, the one behind loses.
         Vec3 impulse = axis.scale(acceleration * effectiveMass * timeStep);
         applyImpulse(subLevel, handle, here, impulse);
-        applyImpulse(otherSubLevel, otherHandle, there, impulse.negate());
+        applyImpulse(otherSubLevel, otherHandle, there, impulse.scale(-1.0));
     }
 
     /** Applies a world impulse at a world point, converting both to the plot frame Sable expects. */

@@ -61,7 +61,6 @@ public final class RailTrack implements RailFrame {
         this.distance = distance;
     }
 
-    @Override
     public TrackGraph graph() {
         return graph;
     }

@@ -40,6 +40,12 @@ public final class BridgedCarriage extends Carriage {
         this.id = original.id;
         this.body = body;
         this.active = body != null;
+        // Create initialises a carriage's cargo storage when it sets up the contraption. A bridged
+        // carriage never gets that call, and an uninitialised manager throws the moment the train is
+        // written to NBT - the harness caught it as "MountedStorageManager is uninitialized" on the
+        // first save-shaped round trip. The storage is empty here because cargo is disabled while a
+        // carriage is bridged, but it has to exist.
+        this.storage.initialize();
     }
 
     /** The body this carriage follows, or {@code null} while it is deactivated. */

@@ -106,16 +106,19 @@ public final class BridgedCarriage extends Carriage {
     }
 
     /**
-     * While active, the body is the carriage, so Create must not create a contraption entity for it.
+     * A bridged carriage never lets Create create a contraption entity for it.
      *
-     * <p>Anchors are still updated inside {@code travel}; only the entity side is skipped. A
-     * deactivated carriage goes back to the normal path.</p>
+     * <p>Anchors are still updated inside {@code travel}; only the entity side is skipped. This is
+     * not conditional on being active, and the reason is a failure the harness caught: the moment
+     * Create is allowed to run its normal path it finds no serialised contraption in a carriage that
+     * was built by the bridge, cannot create the entity, sets {@code Train.invalid} and the train is
+     * removed from the railway manager on the next tick. A carriage whose blocks live in a Sable body
+     * has nothing to hand back to Create, so the suppression has to last as long as the carriage
+     * does - including after it is unbridged.</p>
      */
     @Override
     public void manageEntities(Level level) {
-        if (!isActive()) {
-            super.manageEntities(level);
-        }
+        // Intentionally empty: see the method comment.
     }
 
     /**

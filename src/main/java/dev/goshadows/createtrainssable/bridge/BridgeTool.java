@@ -90,7 +90,8 @@ public final class BridgeTool {
         if (carried != null) {
             TrainBridge.detach(carried);
             return report(player, Status.UNBRIDGED, carried, "Train " + shortId(carried)
-                    + " no longer rides these bodies; its carriages moved back to Create.");
+                    + " no longer rides these bodies: the vehicles stay where they are and the"
+                    + " train continues on its track on its own.");
         }
 
         ServerSubLevelContainer container = SubLevelContainer.getContainer(level);

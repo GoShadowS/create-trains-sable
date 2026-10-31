@@ -848,8 +848,10 @@ public final class SelfTest {
         private double start;
         private double movedBefore;
         private double movedAfterUnbind;
+        private double trainMovedWhileUnbound;
         private double movedAfterRebind;
         private double speedAfterUnbind;
+        private double travelAtUnbind;
         private double rebindStart;
         private String nbtClass = "?";
         private int nbtSpacing = -1;
@@ -865,15 +867,6 @@ public final class SelfTest {
         void begin(ServerLevel level) {
             super.begin(level);
             if (rig == null) {
-                return;
-            }
-            try {
-                train = singleCarriageTrain(rig, 2001.5, 2003.5);
-                train.targetSpeed = COMMAND;
-                CreateTrainsSable.LOGGER.info("CTS DEBUG scenario=entry built train {} trains={}",
-                        train.id, Create.RAILWAYS.trains.size());
-            } catch (RuntimeException | LinkageError e) {
-                fail("train: " + e);
                 finished = true;
             }
         }
@@ -883,11 +876,14 @@ public final class SelfTest {
             if (rig == null) {
                 return;
             }
-            if (ticks <= BRIDGE_AT - 1) {
-                log("trains=" + Create.RAILWAYS.trains.size()
-                        + " ours=" + Create.RAILWAYS.trains.containsValue(train));
-            }
-            if (ticks == BRIDGE_AT) {
+            if (ticks == 1) {
+                // The train has to exist and be bridged in the same tick: a travel-less carriage
+                // has no contraption data for Create to spawn, which is exactly the limitation this
+                // harness works around and a real train never has.
+                train = singleCarriageTrain(rig, 2001.5, 2003.5);
+                train.targetSpeed = COMMAND;
+                CreateTrainsSable.LOGGER.info("CTS DEBUG scenario=entry built train {} trains={}",
+                        train.id, Create.RAILWAYS.trains.size());
                 first = BridgeTool.toggle(level, rig.clickedPos(), null);
                 start = rig.centre().x();
                 if (first.status() != BridgeTool.Status.BRIDGED) {
@@ -905,9 +901,15 @@ public final class SelfTest {
             if (ticks == UNBRIDGE_AT) {
                 movedBefore = rig.centre().x() - start;
                 second = BridgeTool.toggle(level, rig.clickedPos(), null);
+                if (train.carriages.getFirst() instanceof BridgedCarriage carriage) {
+                    travelAtUnbind = carriage.travelToDate();
+                }
             }
             if (ticks == REBRIDGE_AT) {
                 movedAfterUnbind = rig.centre().x() - start;
+                if (train.carriages.getFirst() instanceof BridgedCarriage carriage) {
+                    trainMovedWhileUnbound = carriage.travelToDate() - travelAtUnbind;
+                }
                 speedAfterUnbind = rig.velocity().x();
                 third = BridgeTool.toggle(level, rig.clickedPos(), null);
                 rebindStart = rig.centre().x();
@@ -962,6 +964,10 @@ public final class SelfTest {
                 fail("the body was still driven after unbinding: " + f(speedAfterUnbind) + " m/s");
                 return;
             }
+            if (trainMovedWhileUnbound < 0.5) {
+                fail("the train stopped moving when it was unbound: " + f(trainMovedWhileUnbound));
+                return;
+            }
             if (movedAfterRebind < 1.0) {
                 fail("the body did not move again after re-binding: " + f(movedAfterRebind));
                 return;
@@ -994,6 +1000,7 @@ public final class SelfTest {
                     + " moved_bridged=" + f(movedBefore)
                     + " moved_while_unbound=" + f(movedAfterUnbind - movedBefore)
                     + " speed_after_unbind=" + f(speedAfterUnbind)
+                    + " train_moved_unbound=" + f(trainMovedWhileUnbound)
                     + " moved_after_rebind=" + f(movedAfterRebind)
                     + " nbt_class=" + nbtClass
                     + " nbt_spacing=" + nbtSpacing

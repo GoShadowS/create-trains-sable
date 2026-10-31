@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.3.0 - a Create train rides a body
+
+### What this version adds
+
+The seam the mod exists for. Until now a physical vehicle and a Create train were two unrelated
+things: the train moved its own contraption, the body held itself on the rail, and nothing was
+shared between them. A train can now be bridged to a body (`bridge/`), and the division of labour is
+one sentence: **Create keeps the route, the physics keeps the body.**
+
+- `TrainBridge.bridge(train, body)` replaces the carriage of a single-carriage train with a
+  `BridgedCarriage` and binds it to a `CarriageBody`. The train stays in Create's railway manager;
+  its travelling points, anchors, edge points and signal handling remain Create's code, unpatched.
+- `BridgedCarriage` overrides `Carriage.travel` and nothing else. The distance Create computed for
+  that step is replaced by the distance the body covered since the previous call, measured along the
+  carriage's own forward direction. A carriage that is asked to follow a body must not follow a
+  teleport, so the step is clamped at two blocks per tick - above Create's own top speed.
+- `CarriageBody` hands `Train.speed` to the axles as a target speed, and answers two questions: how
+  far the body went, and how fast it is going. Nothing on the train side writes a position, a
+  velocity or an angular velocity of the body.
+- `TruckBlockEntity.driveAlong` is an axle's second input: a speed in m/s and a world direction,
+  projected onto the rail the axle is on. The projection resolves the sign for an axle mounted any
+  way round, so the train's forward is the train's forward and not the block's.
+- A bridged carriage does not spawn a `CarriageContraptionEntity`. The body in the world is the
+  carriage; a contraption entity drawn over it would be a second copy of the same vehicle.
+
+### Why a subclass and not a patch
+
+The engine only has to own one number - how far a carriage travels. A subclass can supply that
+number without a mixin, without editing Create, and without a second representation of the train:
+every other behaviour of `Carriage` is still `Carriage`'s.
+
+### Measured, not claimed
+
+`./gradlew runSelfTest`, scenario `bridge`, dedicated server, 220 ticks (the log line is wrapped):
+
+```
+bridge PASS carriages=1 target=1.600 speed=1.424 travelled_body=14.234 travelled_train=14.234
+            drift=0.000 lateral_max=0.000 anchor_gap=0.011 ordered=1.600 peak=1.424 rise_ticks=34
+```
+
+The harness builds a real `Train` with a real `Carriage` on the same track graph the trucks ride,
+registers it in Create's railway manager and bridges it to the rig. Create's own train loop then
+drives it. The order reaches the commanded 1.6 m/s (0.08 blocks per tick), the body settles at
+1.424 m/s after 34 ticks of wheel-limited ramp, the carriage travels 14.234 blocks against the body's
+14.234 with zero drift in 220 ticks, and the carriage's leading anchor sits 0.011 blocks from the
+leading axle. A train that dragged its body would be at full speed on the first tick and would hold
+a constant offset from it; `rise_ticks=34` and `drift=0.000` are the two numbers that say otherwise.
+
+The remaining 1.42 against 1.6 is the same shortfall the `traction` scenario reports and has the same
+cause: the idling axle rolls and takes energy out. It is the model, not a miss.
+
+### Known limits of this phase
+
+- The bridge has no in-game entry point yet: it is called by code, or by the harness.
+- A carriage's own contraption is not converted into a body. The bridge joins a train to a body that
+  already exists; reading the contraption, placing its blocks and assembling them is the next step.
+- One carriage per body. `TrainBridge.bridge` refuses a train with more than one carriage, because
+  the couplings between bodies have to decide who pulls whom.
+- Passengers and cargo stay on the contraption side.
+
+
 ## 0.2.2 - a physics harness, and the direction of 0.2.0 called what it was
 
 ### Why the next version changes direction again

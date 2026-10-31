@@ -1,17 +1,20 @@
 package dev.goshadows.createtrainssable.rail;
 
+import com.mojang.serialization.MapCodec;
+import com.simibubi.create.foundation.block.IBE;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
-import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 
@@ -23,7 +26,11 @@ import javax.annotation.Nullable;
  * shunt at the back of the train is felt at the front. Unlike a rigid joint this is forgiving - it
  * stretches under load and settles, which is what a real screw coupling does.</p>
  */
-public class SpringCouplingBlock extends HorizontalDirectionalBlock {
+public class SpringCouplingBlock extends HorizontalDirectionalBlock
+        implements IBE<SpringCouplingBlockEntity> {
+
+    public static final MapCodec<SpringCouplingBlock> CODEC =
+            simpleCodec(SpringCouplingBlock::new);
 
     public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
 
@@ -32,6 +39,11 @@ public class SpringCouplingBlock extends HorizontalDirectionalBlock {
     public SpringCouplingBlock(Properties properties) {
         super(properties);
         registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
+    }
+
+    @Override
+    protected @NotNull MapCodec<? extends HorizontalDirectionalBlock> codec() {
+        return CODEC;
     }
 
     @Override
@@ -51,9 +63,13 @@ public class SpringCouplingBlock extends HorizontalDirectionalBlock {
         return SHAPE;
     }
 
-    @Nullable
     @Override
-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new SpringCouplingBlockEntity(pos, state);
+    public Class<SpringCouplingBlockEntity> getBlockEntityClass() {
+        return SpringCouplingBlockEntity.class;
+    }
+
+    @Override
+    public BlockEntityType<? extends SpringCouplingBlockEntity> getBlockEntityType() {
+        return CTSBlockEntities.COUPLING.get();
     }
 }

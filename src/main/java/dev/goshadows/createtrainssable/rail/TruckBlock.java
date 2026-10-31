@@ -1,18 +1,17 @@
 package dev.goshadows.createtrainssable.rail;
 
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
+import com.simibubi.create.foundation.block.IBE;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
-
-import javax.annotation.Nullable;
 
 /**
  * A truck: the block that puts a Sable vehicle on Create's rails.
@@ -26,7 +25,7 @@ import javax.annotation.Nullable;
  * vehicle tries to reach. A rolling truck carries weight, coasts and brakes. A vehicle needs at least
  * one driven truck.</p>
  */
-public class TruckBlock extends HorizontalKineticBlock {
+public class TruckBlock extends HorizontalKineticBlock implements IBE<TruckBlockEntity> {
 
     public static final Property<Direction> FACING = HorizontalKineticBlock.HORIZONTAL_FACING;
 
@@ -62,9 +61,13 @@ public class TruckBlock extends HorizontalKineticBlock {
         return SHAPE;
     }
 
-    @Nullable
     @Override
-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new TruckBlockEntity(pos, state);
+    public Class<TruckBlockEntity> getBlockEntityClass() {
+        return TruckBlockEntity.class;
+    }
+
+    @Override
+    public BlockEntityType<? extends TruckBlockEntity> getBlockEntityType() {
+        return CTSBlockEntities.TRUCK.get();
     }
 }

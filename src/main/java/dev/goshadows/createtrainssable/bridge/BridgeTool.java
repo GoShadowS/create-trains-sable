@@ -100,7 +100,7 @@ public final class BridgeTool {
         Train train = nearestTrain(level, body);
         if (train == null) {
             return report(player, Status.NO_TRAIN, null, "No unbridged train within "
-                    + (int) SEARCH_RADIUS + " blocks of this vehicle.");
+                    + (int) SEARCH_RADIUS + " blocks of this vehicle; " + describeTrains(level, body));
         }
 
         int wanted = train.carriages.size();

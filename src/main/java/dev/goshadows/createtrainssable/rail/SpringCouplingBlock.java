@@ -34,7 +34,7 @@ public class SpringCouplingBlock extends HorizontalDirectionalBlock
 
     public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
 
-    private static final VoxelShape SHAPE = Block.box(4.0, 1.0, 3.0, 12.0, 9.0, 13.0);
+    private static final VoxelShape SHAPE = Block.box(2.0, 1.0, 1.0, 14.0, 10.0, 13.0);
 
     public SpringCouplingBlock(Properties properties) {
         super(properties);

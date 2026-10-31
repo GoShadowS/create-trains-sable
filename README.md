@@ -39,9 +39,11 @@ Minecraft 1.21.1 · NeoForge · Create 6.0.10 · Sable 2.0
 | **Rolling Truck** | Carries weight and rolls. Use as many as the train needs. |
 | **Spring Coupling** | Links two vehicles that are close enough and facing each other. |
 
-The trucks are drawn as a low steel frame on a visible wheel; the traction truck carries
-its drive housing on top, so a powered axle and an idler axle never look the same. The
-coupling is a plate with a coil spring reaching towards the vehicle in front of it.
+Each truck is a low steel frame with a riveted waist and a wheel on both sides of the
+axle. The driven one carries a red motor housing on top of the frame; the idler only has a
+bolted cover, so a powered axle and an idler axle never look the same from across the
+track. The coupling is a cast buffer plate with a coil spring reaching towards the vehicle
+in front of it.
 
 All three are in the mod's own creative tab.
 
@@ -123,9 +125,10 @@ curves, lower it and a normal bend at speed throws the vehicle off.
   should be and a force controller takes the body there; the body can lose that argument -
   that is a derailment - but it cannot yet steer itself along a switch that Create would not
   have taken.
-- **Art is a first pass.** The models and textures are made for this mod but they are
-  simple: a steel frame, a wheel, a brass drive housing, a coil spring. They are meant to be
-  replaced by a proper art pass, not to be the final look.
+- **Art is a first pass.** The models and textures are drawn for this mod from scratch and
+  are deliberately flat: a steel frame, a wheel, a red drive housing, a buffer plate and a
+  coil spring, in 16x16. They are meant to be replaced by a proper art pass.
+  `tools/make_textures.py` regenerates them if a colour or a shape needs changing.
 - **Trucks need an assembled sub-level.** They do nothing lying in the world, and this mod
   does not ship an assembly tool - assemble with Create: Aeronautics.
 - **The rail contact is a servo, not a flange.** There is no wheel lift, no axle load

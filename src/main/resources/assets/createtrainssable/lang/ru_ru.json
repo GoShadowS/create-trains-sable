@@ -1,0 +1,14 @@
+{
+  "createtrainssable.configuration.trucks": "Тележки",
+  "createtrainssable.configuration.trucks.tooltip": "Контакт колеса с рельсом: тяга, сцепление, удержание и пределы, за которыми состав сходит с рельсов.",
+  "createtrainssable.configuration.couplings": "Сцепки",
+  "createtrainssable.configuration.couplings.tooltip": "Пружинные сцепки между транспортными средствами.",
+  "createtrainssable.configuration.debug": "Диагностика",
+  "createtrainssable.configuration.debug.tooltip": "Запись состояния каждой оси в лог.",
+  "itemGroup.createtrainssable.main": "Create Trains Sable",
+  "block.createtrainssable.traction_truck": "Тяговая тележка",
+  "block.createtrainssable.rolling_truck": "Поддерживающая тележка",
+  "block.createtrainssable.spring_coupling": "Пружинная сцепка",
+  "item.createtrainssable.assembly_tool": "Инструмент сборки",
+  "item.createtrainssable.assembly_tool.tooltip": "ПКМ по постройке, чтобы превратить её в физическую структуру Sable."
+}

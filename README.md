@@ -20,11 +20,12 @@ the motion, the blocks only push**.
 | **Traction Truck** | A driven axle. Takes rotation on its axle axis and pulls the vehicle along the rail. |
 | **Rolling Truck** | An idler axle. Carries its share of the weight, rolls, and brakes. |
 | **Spring Coupling** | Links two vehicles that face each other. The link is a spring and a damper, applied to both bodies. |
+| **Assembly Tool** | Turns a built vehicle into a Sable sub-level. Right-click it; no command needed. |
 
 Build the vehicle, put trucks under the frame where the axles belong, power the driven ones, add
-couplings to the ends, and assemble the whole thing into a sub-level. From the first physics step
-the vehicle is a rigid body held on Create's rails by force - there is no second copy of it, no
-hidden contraption, and nothing that teleports it.
+couplings to the ends, then right-click the build with the assembly tool. From the first physics
+step the vehicle is a rigid body held on Create's rails by force - there is no second copy of it,
+no hidden contraption, and nothing that teleports it.
 
 ## How it works
 
@@ -99,10 +100,9 @@ maxAcceleration = 14.0
 
 ## Known limitations
 
-- **Assembly is Sable's job.** The mod does not ship an assembly tool: a vehicle is assembled into a
-  sub-level with Sable's own command (`/sable assemble connected`) or with whatever tooling the
-  installed Sable add-ons provide. A block that assembles the connected structure is the next
-  planned addition.
+- **Assembly takes the whole connected structure.** The assembly tool gathers everything touching
+  the block that was clicked, so a vehicle that is connected to the ground or to a building will
+  take that with it. Disconnect it first, or click a part that is not touching the world.
 - **Create trains are not converted.** A Create station train stays a Create contraption. The
   physical vehicle is the one the player builds and assembles; converting station trains would mean
   keeping two representations of the same train in sync, which is exactly what the previous

@@ -651,7 +651,10 @@ public final class SelfTest {
             if (rig == null || train == null || bridged == null) {
                 return;
             }
-            // The train controls of a real train do this every tick; the harness is the driver.
+            // The train controls of a manual train do exactly this every tick: hold the lever,
+            // mark the tick as manual, and let Create's own acceleration ramp the order up.
+            // Without the flag Create would coast the order down to zero against the ramp.
+            train.manualTick = true;
             train.targetSpeed = COMMAND;
             train.approachTargetSpeed(1.0f);
 

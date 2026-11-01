@@ -1,9 +1,9 @@
 modLoader = "javafml"
 loaderVersion = "[4,)"
 license = "Apache-2.0"
-# Applies to the code. The textures, models, blockstates and language files under assets/ are
-# All Rights Reserved - see ASSETS_LICENSE and NOTICE. There is one licence field for the mod, so the
-# split is documented in those files.
+# Applies to the code (LICENSE-APACHE). The textures, models, blockstates and language files under
+# assets/ are All Rights Reserved (LICENSE-ARR). There is one licence field for the mod, so the split
+# is documented in those two files and in NOTICE.
 issueTrackerURL = "https://github.com/GoShadowS/create-trains-sable/issues"
 
 [[mods]]

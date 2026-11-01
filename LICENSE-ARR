@@ -8,13 +8,13 @@ WHAT THIS FILE COVERS
 
 The code and the assets of this project are licensed separately.
 
-  CODE - Apache License 2.0 (see LICENSE), file NOTICE must travel with it:
+  CODE - Apache License 2.0 (see LICENSE-APACHE), file NOTICE must travel with it:
       src/main/java/**
       src/test/java/**
       build.gradle, settings.gradle, gradle.properties
       tools/**
       the documentation files in the repository root: README.md, CHANGELOG.md,
-      CONTRIBUTING.md, CITATION.cff
+      CONTRIBUTING.md
 
   ASSETS - All Rights Reserved (this file):
       src/main/resources/assets/createtrainssable/textures/**

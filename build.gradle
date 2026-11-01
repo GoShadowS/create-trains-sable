@@ -89,14 +89,12 @@ neoForge {
             client()
             ideName = 'Create Trains Sable: Client'
             gameDirectory = project.file('runs/client')
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
         }
         server {
             server()
             ideName = 'Create Trains Sable: Server'
             gameDirectory = project.file('runs/server')
             programArgument '--nogui'
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
         }
         // Scripted physics session: builds a vehicle, drives it and prints measurements.
         // `./gradlew runSelfTest` runs the whole set and stops the server by itself.
@@ -106,13 +104,6 @@ neoForge {
             gameDirectory = project.file('runs/selftest')
             programArgument '--nogui'
             systemProperty 'cts.selftest', 'true'
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
-        }
-        gameTestServer {
-            type = 'gameTestServer'
-            ideName = 'Create Trains Sable: Game Tests'
-            gameDirectory = project.file('runs/gametest')
-            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
         }
         configureEach {
             logLevel = org.slf4j.event.Level.DEBUG

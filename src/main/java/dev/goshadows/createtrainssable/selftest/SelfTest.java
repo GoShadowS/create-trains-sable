@@ -20,6 +20,10 @@ import dev.goshadows.createtrainssable.rail.WheelRail;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -1413,6 +1417,8 @@ public final class SelfTest {
         private Train train;
         private BridgedCarriage bridged;
         private double startCentre;
+        private Entity marker;
+        private boolean markerAlive;
         private int entitiesStart;
         private int entitiesEnd;
         private int contraptions;
@@ -1439,6 +1445,7 @@ public final class SelfTest {
                 TrainBridge.Bridge bridge = TrainBridge.bridge(train, rig.body);
                 bridged = bridge.carriages().getFirst();
                 startCentre = rig.centre().x();
+                spawnMarker();
                 entitiesStart = countEntities();
                 heapStart = usedHeap();
             } catch (RuntimeException | LinkageError e) {
@@ -1476,6 +1483,7 @@ public final class SelfTest {
             }
             entitiesEnd = countEntities();
             contraptions = countContraptions();
+            markerAlive = marker != null && marker.isAlive();
             heapEnd = usedHeap();
             travelled = rig.centre().x() - startCentre;
             trainTravelled = bridged.travelToDate();
@@ -1490,6 +1498,14 @@ public final class SelfTest {
             }
             if (contraptions != 0) {
                 fail(contraptions + " carriage contraption entities exist for a bridged train");
+                return;
+            }
+            if (entitiesStart < 1) {
+                fail("the level held no entity at the start, so the leak check measured nothing");
+                return;
+            }
+            if (!markerAlive) {
+                fail("the reference entity did not survive the run, so the count cannot be trusted");
                 return;
             }
             if (entitiesEnd > entitiesStart) {
@@ -1507,6 +1523,24 @@ public final class SelfTest {
                 return;
             }
             pass();
+        }
+
+        /**
+         * Puts one harmless entity in the level before the count starts.
+         *
+         * <p>The entity count is what makes "nothing grew over the run" a measurement instead of a
+         * constant: in a session that never spawned an entity the level reports zero before and zero
+         * after, and a leak cannot be seen in a count that is empty at both ends. A dropped stick is
+         * a cheap reference entity that no part of the mod touches.</p>
+         */
+        private void spawnMarker() {
+            if (rig == null) {
+                return;
+            }
+            marker = new ItemEntity(level, startCentre, rig.railHeight() + 0.5, rig.centre().z(),
+                    new ItemStack(Items.STICK));
+            marker.setNoGravity(true);
+            level.addFreshEntity(marker);
         }
 
         private int countEntities() {
@@ -1540,6 +1574,7 @@ public final class SelfTest {
                     + " drift=" + f(travelled - trainTravelled)
                     + " entities_start=" + entitiesStart
                     + " entities_end=" + entitiesEnd
+                    + " reference_entity_alive=" + markerAlive
                     + " contraption_entities=" + contraptions
                     + " heap_start_mb=" + (heapStart >> 20)
                     + " heap_end_mb=" + (heapEnd >> 20)

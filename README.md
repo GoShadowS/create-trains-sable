@@ -363,21 +363,30 @@ available, which is exactly how a diagnostic turns into a phantom defect:
   `SubLevelPhysicsSystem.updatePose` at the end of every substep from the difference between the pose
   the pipeline reported and the pose at the start of the tick.
 
-They are sampled at different moments. Sable calls `sable$physicsTick` for every actor *before*
-`pipeline.physicsTick(substepTimeStep)`, so a read there is the body's state at the boundary between
-two substeps - before this substep's impulses, including the truck's own traction and flange forces,
-have been resolved. The second value is an average over the positions that were actually integrated.
-The `couple` scenario now reports both for the same two bodies in the same run:
+They are sampled at different moments, and one of them is measured the way a physicist would: Sable
+calls `sable$physicsTick` for every actor *before* `pipeline.physicsTick(substepTimeStep)`, so a read
+there is the body's state at the boundary between two substeps - before that substep's impulses,
+including the truck's own traction and flange forces, have been resolved - while the pose derivative
+is computed from positions that were actually integrated. The `couple` scenario reports both for the
+same two bodies in the same run:
 
 ```
-v_solver_front=0.834  v_pose_front=0.879   (bias -0.045)
-v_solver_rear =0.884  v_pose_rear =0.879   (bias +0.005)
+v_solver_front=0.837  v_pose_front=0.879   (bias -0.042)
+v_solver_rear =0.882  v_pose_rear =0.879   (bias +0.003)
 ```
 
-The pose-derived speed is 0.879 m/s for both bodies, which is what a locked pair must be, and matches
-the distance they cover per tick. The solver readings differ from it by a per-body constant: -0.045
-on the driven body, +0.005 on the passive one. That is the whole explanation of `v_front=0.834` versus
-`v_rear=0.884`, and it is not relative motion.
+The pose-derived speed is 0.879 m/s for both bodies, which is what a locked pair must be, and it is
+the only one of the three numbers that agrees with the distance the bodies cover: in the last
+twenty-tick window the front body advanced 25.102 - 24.223 = 0.879 blocks per 20 ticks, the rear
+24.844 - 23.966 = 0.878. The solver readings differ from it by a per-body constant: -0.042 on the
+driven body, +0.003 on the passive one. That is the whole explanation of `v_front` versus `v_rear` in
+the log, and it is not relative motion: the gap between the bodies drifts 0.000 blocks over the run.
+
+Why the solver read carries a per-body bias is an inference, not a measurement: an impulse applied
+once per tick is resolved in substep 1, so a read at the tick boundary sees a body that has not been
+pushed yet by exactly the amount it is about to be pushed, and how large that amount is depends on
+that body's own force budget - the driven body and the pulled body do not spend it the same way. The
+measurement establishes the bias and its sign; the mechanism is the explanation that fits it.
 
 Where each source is used, and what happens to the bias:
 
@@ -385,7 +394,7 @@ Where each source is used, and what happens to the bias:
 | --- | --- | --- | --- |
 | `CarriageBody.advance` (the bridge itself) | positions | the distance a carriage travels must be what happened, not what a solver predicted | none - this is the one that matters |
 | `CarriageBody.measuredSpeed` | solver | diagnostics and harness only | yes, reported as such in this README |
-| `TrainBridge.couple` (damping) | pose (was solver) | a relative speed; per-body bias adds to 0.05 m/s and leaks into the damping force | fixed in `0.4.2-alpha.1`: now uses `latestLinearVelocity` |
+| `TrainBridge.couple` (damping) | pose, since `0.4.2-alpha.1` (was solver) | a relative speed: a per-body bias of -0.042 and +0.003 cancels in the *sum* only by accident, and here it did not, leaving a 0.045 m/s phantom closing speed and a damping force behind it | removed; side effect is 1.7 cm more steady extension, see the changelog entry |
 | `TruckBlockEntity.sable$physicsTick` | solver | a control loop inside the substep wants the current state, not a tick average | yes, and it is bounded: a 0.045 m/s bias in the along-speed enters the demand as `4.0 * 0.045 = 0.18 m/s^2` against a 1.2 m/s^2 traction cap |
 | `SpringCouplingBlockEntity` (the block-based coupling) | solver | same in-substep control argument | yes, same bound; it is the older path and bridged trains do not use it |
 | phase C (riders, `pushEntityLocal`) | not yet written | - | must use positions or `latestLinearVelocity`; a rider carried at a solver-read speed would jitter by that same 0.045 m/s |

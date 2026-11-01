@@ -67,12 +67,17 @@ Dead code that no longer had a caller after the bridge and the soak scenario: `W
 
 ### Changed
 
-- The damping term in `TrainBridge.couple` now reads each body's speed from the pose Sable
-  integrated (`ServerSubLevel.latestLinearVelocity`) instead of the solver state
-  (`RigidBodyHandle.getLinearVelocity`). The two disagree by a per-body constant - measured -0.045 m/s
-  on the driven body and +0.005 m/s on the passive one in the same run - and the damping term works on
-  the *difference*, so those biases added up instead of cancelling. Nothing in the coupling geometry
-  changed; only the input to the damper.
+- The damping term in `TrainBridge.couple` reads each body's speed from the pose Sable integrated
+  (`ServerSubLevel.latestLinearVelocity`) instead of the solver state
+  (`RigidBodyHandle.getLinearVelocity`). A locked pair must have the same speed; measured in one run,
+  the solver disagreed with itself by 0.045 m/s between the two bodies while the pose derivative gave
+  both 0.879 m/s, which is the speed the bodies actually covered (0.879 blocks per 20 ticks). A
+  spurious relative speed entered through the damper; that input is now gone.
+- Side effect of removing it, reported rather than absorbed: the steady-state coupling extension in
+  `couple` grew from 0.240 to 0.257 blocks (peak 0.246 -> 0.257), because the phantom damping force had
+  also been helping damp the initial stretch. Tolerance is 1.0 block, so 0.743 blocks of margin remain;
+  `gap_drift` stays 0.000. Whether the damper wants a small explicit term for that is a phase-B
+  question, not something to paper over with a biased input.
 
 ### Measured
 
@@ -81,15 +86,17 @@ by comparing both sources Sable offers, in the same tick, for both bodies of the
 
 | | front | rear |
 | --- | --- | --- |
-| solver state, m/s | 0.834 | 0.884 |
+| solver state, m/s | 0.837 | 0.882 |
 | pose derivative, m/s | 0.879 | 0.879 |
-| difference | -0.045 | +0.005 |
+| displacement, blocks / 20 ticks | 0.879 | 0.878 |
+| difference solver - pose | -0.042 | +0.003 |
 
-Locked bodies must share a speed, and the pose-derived one does; the solver readings straddle it. The
-cause is documented in `README.md` under "Two speeds, and which one to trust": Sable calls
-`sable$physicsTick` for every actor before `pipeline.physicsTick`, so a read there is the state before
-the substep's impulses are resolved. `scenarios=8 passed=8 failed=0`, 18 unit tests, same geometry:
-`gap_end=10.240 gap_drift=0.000`.
+Locked bodies must share a speed; the pose derivative gives both the same value and matches
+displacement, the solver readings straddle it. Mechanism (inference, see `README.md`, "Two speeds, and
+which one to trust"): Sable calls `sable$physicsTick` for every actor before
+`pipeline.physicsTick`, and an impulse applied once per tick is resolved in the first substep, so the
+boundary read predates the push. `scenarios=8 passed=8 failed=0`, 18 unit tests, geometry unchanged:
+`spacing=6.000 rest=10.000 gap_start=10.000 gap_end=10.257 gap_drift=0.000 extension=0.257`.
 
 
 ## 0.4.1-alpha.1 (published as `0.4.1`) - the coupling settles, and a bridged train costs nothing that grows

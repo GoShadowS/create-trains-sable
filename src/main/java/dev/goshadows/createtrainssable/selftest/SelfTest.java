@@ -7,7 +7,6 @@ import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
 import com.simibubi.create.content.trains.entity.CarriageBogey;
 import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.graph.DimensionPalette;
-import com.simibubi.create.content.trains.graph.TrackGraph;
 import dev.goshadows.createtrainssable.CreateTrainsSable;
 import dev.goshadows.createtrainssable.bridge.BridgeTool;
 import dev.goshadows.createtrainssable.bridge.BridgedCarriage;
@@ -837,7 +836,6 @@ public final class SelfTest {
         /** Speed the train asks for, in blocks per tick: 0.08 * 20 = 1.6 m/s. */
         private static final double COMMAND = 0.08;
 
-        private static final int BRIDGE_AT = 10;
         private static final int UNBRIDGE_AT = 80;
         private static final int REBRIDGE_AT = 100;
         private static final int END = 170;
@@ -1079,7 +1077,6 @@ public final class SelfTest {
         private boolean trailerDriven;
         private double gapDrift;
         private double meanRelative = Double.NaN;
-        private double instantRelative;
         private double frontBiasMean = Double.NaN;
         private double rearBiasMean = Double.NaN;
         private double frontPoseMean = Double.NaN;
@@ -1352,7 +1349,6 @@ public final class SelfTest {
                     + " gap_min=" + f(gapMin) + " gap_max=" + f(gapMax)
                     + " gap_drift=" + f(gapDrift)
                     + " rel_speed_mean=" + f(meanRelative)
-                    + " rel_speed_instant=" + f(instantRelative)
                     + " rel_speed_worst=" + f(relativeWorst)
                     + " front_v_bias=" + f(frontBiasMean) + " rear_v_bias=" + f(rearBiasMean)
                     + " v_solver_front=" + f(frontSolverMean) + " v_pose_front=" + f(frontPoseMean)

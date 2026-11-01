@@ -1,0 +1,79 @@
+Create Trains Sable - assets licence
+
+Copyright 2026 GoShadowS (https://github.com/GoShadowS/create-trains-sable)
+All rights reserved.
+
+
+WHAT THIS FILE COVERS
+
+The code and the assets of this project are licensed separately.
+
+  CODE - Apache License 2.0 (see LICENSE), file NOTICE must travel with it:
+      src/main/java/**
+      src/test/java/**
+      build.gradle, settings.gradle, gradle.properties
+      tools/**
+      the documentation files in the repository root: README.md, CHANGELOG.md,
+      CONTRIBUTING.md, CITATION.cff
+
+  ASSETS - All Rights Reserved (this file):
+      src/main/resources/assets/createtrainssable/textures/**
+      src/main/resources/assets/createtrainssable/models/**
+      src/main/resources/assets/createtrainssable/blockstates/**
+      src/main/resources/assets/createtrainssable/lang/**
+      src/main/resources/pack.mcmeta
+      and, when they are added, every sound, animation, font or other art asset
+      under src/main/resources/assets/createtrainssable/
+
+The licence of a file is decided by where it lives, not by what it contains. A file
+under assets/ is All Rights Reserved even if an Apache-2.0 header is missing from it,
+and a file under src/main/java/ is Apache-2.0 even if it lies next to an asset.
+
+
+WHAT YOU MAY DO WITHOUT ASKING
+
+1. Use this mod as it is: install it in a Minecraft client or on a server, alone or
+   in a modpack, and play with it. No permission and no fee.
+2. Copy and redistribute the mod jar, unmodified, including in a modpack, in a video
+   or in a server pack. The unmodified jar carries its assets as part of itself, and
+   that is allowed - together with the attribution required by NOTICE.
+3. Look at the assets, learn from them, and generate your own from scratch.
+4. Fork the code under Apache-2.0 and replace every asset under assets/ with your own.
+
+
+WHAT YOU MAY NOT DO WITHOUT THE AUTHOR'S WRITTEN PERMISSION
+
+1. Copy, extract, rip or reuse any texture, model, blockstate, language file or other
+   asset - in whole or in part - in another project, mod, resource pack, datapack,
+   server, dataset or commercial product.
+2. Modify, recolour, crop, upscale, trace, re-render or otherwise create derivative
+   assets from them. A "recoloured" or "redrawn" copy is a derivative asset.
+3. Redistribute the assets separately from this project, or inside a fork that has
+   been renamed, rebranded or otherwise presented as a different project.
+4. Repackage the assets as a licence-free collection, a "free to use" pack, or in a
+   paid or ad-supported product.
+5. Use the assets to train, fine-tune or evaluate a generative model.
+
+
+FORKS
+
+A fork may keep the code, keep the attribution and keep the name, and then it
+inherits the whole project as it is. A fork that renames or rebrands the project must
+replace the assets with its own; it may not carry these textures and models into a
+different product. Either way, NOTICE and the "Original project" section of README.md
+stay. See Apache-2.0 section 4 for the code side of that requirement.
+
+
+WHY THIS SPLIT
+
+This is the same split Create itself uses: MIT for the code, All Rights Reserved for
+the art. The reason is practical. Code that cannot be reused is dead weight; art that
+is freely reusable ends up in a dozen renamed packs, attributed to nobody, and the
+person who drew it has no way to say no. The textures here were made for this mod, and
+they stay with it.
+
+
+QUESTIONS
+
+If you want to use an asset and you are not sure whether this file allows it, ask
+before using it: https://github.com/GoShadowS/create-trains-sable/issues

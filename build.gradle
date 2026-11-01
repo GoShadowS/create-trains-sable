@@ -87,12 +87,12 @@ neoForge {
     runs {
         client {
             client()
-            ideName = 'Create: Sable 'n Rails: Client'
+            ideName = "Create: Sable 'n Rails: Client"
             gameDirectory = project.file('runs/client')
         }
         server {
             server()
-            ideName = 'Create: Sable 'n Rails: Server'
+            ideName = "Create: Sable 'n Rails: Server"
             gameDirectory = project.file('runs/server')
             programArgument '--nogui'
         }
@@ -100,7 +100,7 @@ neoForge {
         // `./gradlew runSelfTest` runs the whole set and stops the server by itself.
         selfTest {
             server()
-            ideName = 'Create: Sable 'n Rails: Physics Self-Test'
+            ideName = "Create: Sable 'n Rails: Physics Self-Test"
             gameDirectory = project.file('runs/selftest')
             programArgument '--nogui'
             systemProperty 'cts.selftest', 'true'

@@ -7,6 +7,12 @@ import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
 import com.simibubi.create.content.trains.entity.CarriageBogey;
 import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.graph.DimensionPalette;
+import com.simibubi.create.content.trains.schedule.Schedule;
+import com.simibubi.create.content.trains.schedule.ScheduleEntry;
+import com.simibubi.create.content.trains.schedule.destination.ChangeThrottleInstruction;
+import com.simibubi.create.content.trains.schedule.destination.DestinationInstruction;
+import com.simibubi.create.content.trains.station.GlobalStation;
+import com.simibubi.create.content.trains.station.StationBlockEntity;
 import dev.goshadows.createtrainssable.CreateTrainsSable;
 import dev.goshadows.createtrainssable.bridge.BridgeTool;
 import dev.goshadows.createtrainssable.bridge.BridgedCarriage;
@@ -18,6 +24,8 @@ import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.rail.TruckBlockEntity;
 import dev.goshadows.createtrainssable.rail.Vec;
 import dev.goshadows.createtrainssable.rail.WheelRail;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -30,6 +38,7 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -89,6 +98,8 @@ public final class SelfTest {
                 new EntryScenario(),
                 new CoupleScenario(),
                 new ChainScenario(),
+                new ConductorsScenario(),
+                new StationScenario("station", 1400, 2562),
                 new SoakScenario());
 
         private int index = -1;
@@ -1438,6 +1449,494 @@ public final class SelfTest {
 
 
     /**
+     * A bridged consist with a driver in it, and one without.
+     *
+     * <p>Create will not navigate a train whose carriages report no conductor, and a bridged carriage
+     * has no contraption to report one from - which is why a bridged train could be driven by hand but
+     * never run a schedule. The bridge answers that question from the blocks in the body, so this
+     * scenario builds a three-carriage consist where only the middle vehicle has a cab, and checks
+     * that exactly that carriage reports a forward driver and that nobody reports a backward one.</p>
+     */
+    private static final class ConductorsScenario extends Scenario {
+
+        private static final int END = 40;
+        private static final int REAR_X = 2000;
+        private static final int MIDDLE_X = 2010;
+        private static final int FRONT_X = 2020;
+        private static final int RAIL_FROM = 1960;
+        private static final int RAIL_TO = 2100;
+
+        private TestRig middle;
+        private TestRig rear;
+        private TestRig.Rail rail;
+        private Train train;
+        private final boolean[] perCarriageForward = new boolean[3];
+        private final boolean[] perCarriageBackward = new boolean[3];
+        private boolean forward;
+        private boolean backward;
+        private boolean checked;
+        private String probe = "";
+
+        ConductorsScenario() {
+            super("conductors", END, 2552);
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            this.level = level;
+            try {
+                rail = TestRig.rail(level, RAIL_FROM, RAIL_TO, 100, z + 1.5);
+                rear = TestRig.assembleOn(rail, REAR_X, z, false, false);
+                middle = TestRig.assembleOn(rail, MIDDLE_X, z, false, false, Direction.EAST);
+                rig = TestRig.assembleOn(rail, FRONT_X, z, true, false);
+                List<TestRig> bodies = List.of(rig, middle, rear);
+                train = trainOf(bodies, new int[]{FRONT_X, MIDDLE_X, REAR_X});
+                train.targetSpeed = 0.0;
+                TrainBridge.bridge(train, List.of(rig.body, middle.body, rear.body));
+            } catch (RuntimeException | LinkageError e) {
+                CreateTrainsSable.LOGGER.error("CTS SELFTEST scenario=conductors could not build", e);
+                fail("build: " + e);
+                finished = true;
+            }
+        }
+
+        @Override
+        void step() {
+            if (train == null) {
+                return;
+            }
+            train.manualTick = true;
+            train.targetSpeed = 0.0;
+            if (ticks < 5) {
+                return;
+            }
+            if (probe.isEmpty() && !train.carriages.isEmpty()
+                    && train.carriages.get(1) instanceof BridgedCarriage middleCarriage) {
+                // The consist faces east, which is the direction a carriage travels in.
+                probe = dev.goshadows.createtrainssable.bridge.BodyConductors.probe(
+                        middleCarriage.body().body(), new Vec3(1, 0, 0));
+            }
+            forward = train.hasForwardConductor();
+            backward = train.hasBackwardConductor();
+            for (int i = 0; i < train.carriages.size() && i < perCarriageForward.length; i++) {
+                Carriage carriage = train.carriages.get(i);
+                perCarriageForward[i] = carriage.presentConductors.getFirst();
+                perCarriageBackward[i] = carriage.presentConductors.getSecond();
+            }
+            checked = true;
+            log("forward=" + forward + " backward=" + backward
+                    + " per_carriage_forward=" + Arrays.toString(perCarriageForward)
+                    + " per_carriage_backward=" + Arrays.toString(perCarriageBackward));
+            if (!forward) {
+                fail("no carriage reported a driver, although one vehicle carries a lit burner and "
+                        + "a controls block facing forward");
+                return;
+            }
+            if (backward) {
+                fail("a carriage reported a driver facing backward, there is none");
+                return;
+            }
+            if (perCarriageForward[0] || perCarriageForward[2]) {
+                fail("a vehicle without a cab reported a driver: "
+                        + Arrays.toString(perCarriageForward));
+                return;
+            }
+            if (!perCarriageForward[1]) {
+                fail("the vehicle with the cab did not report its driver");
+                return;
+            }
+            pass();
+        }
+
+        @Override
+        void finish() {
+            if (!checked) {
+                fail("the train never reported a conductor either way");
+            }
+        }
+
+        @Override
+        String metrics() {
+            return "carriages=" + (train == null ? 0 : train.carriages.size())
+                    + " drivers_in_bodies=1"
+                    + " forward=" + forward + " backward=" + backward
+                    + " carriage_forward=" + Arrays.toString(perCarriageForward)
+                    + " carriage_backward=" + Arrays.toString(perCarriageBackward)
+                    + " probe=\"" + probe + "\""
+                    + " ticks=" + ticks;
+        }
+
+        @Override
+        void cleanup() {
+            if (train != null) {
+                TrainBridge.detach(train);
+                Create.RAILWAYS.removeTrain(train.id);
+                train.invalid = true;
+                train = null;
+            }
+            for (TestRig body : new TestRig[]{rig, middle, rear}) {
+                if (body != null) {
+                    body.remove();
+                }
+            }
+            rig = null;
+            middle = null;
+            rear = null;
+            if (rail != null) {
+                rail.remove();
+                rail = null;
+            }
+        }
+    }
+
+    /**
+     * Three vehicles walking to a real station on Create's own schedule.
+     *
+     * <p>The bridge answers "is there a driver" and "where is the body" but says nothing about
+     * stations, so this scenario is the proof that Create's route still works when the body is
+     * physical: a real station block beside a real track block, a real schedule with one destination,
+     * and a consist whose only cab is in the middle vehicle. Nothing in the harness asks the train to
+     * stop - Create decides where the station is, how fast to approach it and when to stand still.</p>
+     *
+     * <p>What is measured is the part a schedule cannot tell you: how far the consist rolled while it
+     * braked, where the front of the train came to rest relative to the station, and whether it came
+     * to rest at all rather than creeping past.</p>
+     */
+    private static class StationScenario extends Scenario {
+
+        static final double RAIL_FROM = 1960.5;
+        static final int RAIL_TO = 2100;
+        static final int RAIL_Y = 100;
+        /** Node of the station the consist runs to; about thirty blocks from where it starts. */
+        static final double STATION_NODE = 2056.5;
+        /** The same station facing the other way, further along, so a wrong face cannot hide it. */
+        static final double STATION_B_NODE = 2064.5;
+        static final String STATION_NAME = "harness";
+        /** Line speed of the run, in per cent of the train's top speed. */
+        static final int THROTTLE_PERCENT = 10;
+        static final int REAR_X = 2000;
+        static final int MIDDLE_X = 2010;
+        static final int FRONT_X = 2020;
+
+        TestRig middle;
+        TestRig rear;
+        TestRig.Rail rail;
+        Train train;
+        StationBlockEntity station;
+        StationBlockEntity stationB;
+        BlockPos stationTrack;
+        BlockPos stationPos;
+        BlockPos stationBTrack;
+        BlockPos stationBPos;
+        GlobalStation point;
+        GlobalStation pointB;
+        double arrivedAt = Double.NaN;
+        boolean arrived;
+        double frontStart = Double.NaN;
+        double frontX = Double.NaN;
+        double bodyStart = Double.NaN;
+        double bodyX = Double.NaN;
+        double topSpeed;
+        double brakeFromX = Double.NaN;
+        double stopX = Double.NaN;
+        double peakBeforeBrake;
+        double distanceToDestination = Double.NaN;
+        int movingTicks;
+        int stopTick = -1;
+        String scheduleState = "";
+
+        StationScenario(String name, int budget, int z) {
+            super(name, budget, z);
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            this.level = level;
+            try {
+                rail = TestRig.rail(level, RAIL_FROM, RAIL_TO, RAIL_Y, z + 1.5);
+                rear = TestRig.assembleOn(rail, REAR_X, z, false, false);
+                middle = TestRig.assembleOn(rail, MIDDLE_X, z, false, false, Direction.EAST);
+                rig = TestRig.assembleOn(rail, FRONT_X, z, true, false);
+                List<TestRig> bodies = List.of(rig, middle, rear);
+                train = trainOf(bodies, new int[]{FRONT_X, MIDDLE_X, REAR_X});
+                TrainBridge.bridge(train, List.of(rig.body, middle.body, rear.body));
+
+                stationTrack = placeTrack(STATION_NODE);
+                stationPos = beside(stationTrack);
+                station = TestRig.placeStation(level, stationPos, stationTrack, false);
+
+                stationBTrack = placeTrack(STATION_B_NODE);
+                stationBPos = beside(stationBTrack);
+                stationB = TestRig.placeStation(level, stationBPos, stationBTrack, true);
+
+                // A line speed a physical train can actually hold, set the way a player sets it: a
+                // throttle instruction in the schedule, not a number hidden in the harness.
+                ChangeThrottleInstruction throttle = new ChangeThrottleInstruction();
+                throttle.getData().putInt("Value", THROTTLE_PERCENT);
+                DestinationInstruction instruction = new DestinationInstruction();
+                instruction.getData().putString("Text", STATION_NAME);
+                List<ScheduleEntry> entries = new ArrayList<>(2);
+                entries.add(new ScheduleEntry(throttle, new ArrayList<>()));
+                entries.add(new ScheduleEntry(instruction, new ArrayList<>()));
+                train.runtime.setSchedule(new Schedule(entries, false, 0), false);
+                frontStart = front();
+                bodyStart = bodyFront();
+            } catch (RuntimeException | LinkageError e) {
+                CreateTrainsSable.LOGGER.error("CTS SELFTEST scenario={} could not build", name, e);
+                fail("build: " + e);
+                finished = true;
+            }
+        }
+
+        /**
+         * Where a station stands: beside the track, not on it.
+         *
+         * <p>The first run of this scenario put the block above the track, which is inside the
+         * vehicle: the consist rolled up to it and stopped dead one block short of the station. A
+         * station is a block beside the rails, on a platform.</p>
+         */
+        BlockPos beside(BlockPos track) {
+            return track.offset(0, 0, 2);
+        }
+
+        /** A real track block on a node, in a chunk the scenario keeps loaded for its block entity. */
+        BlockPos placeTrack(double node) {
+            BlockPos track = TestRig.trackBlock(node, RAIL_Y, z);
+            TestRig.placeStraightTrack(level, track);
+            BlockPos nearby = beside(track);
+            level.setChunkForced(nearby.getX() >> 4, nearby.getZ() >> 4, true);
+            return track;
+        }
+
+        /** The x of the track block a station stands beside, which is where a train stops. */
+        double stationX(StationBlockEntity station) {
+            return station == null ? Double.NaN : station.edgePoint.getGlobalPosition().getX() + 0.5;
+        }
+
+        /** Whether Create can route this train to that station, asked once, without moving it. */
+        String reachable(GlobalStation station) {
+            if (station == null) {
+                return "none";
+            }
+            return train.navigation.findPathTo(station, 1.0e6) == null ? "no" : "yes";
+        }
+
+        /** The station point as Create stored it: both nodes and which side it can be entered from. */
+        String describe(GlobalStation station, StationBlockEntity blockEntity) {
+            if (station == null) {
+                return "none";
+            }
+            var first = rail.graph.locateNode(station.edgeLocation.getFirst());
+            var second = rail.graph.locateNode(station.edgeLocation.getSecond());
+            return station.name + "@" + f(stationX(blockEntity))
+                    + " pos=" + f(station.position)
+                    + " from_first=" + (first != null && station.canApproachFrom(first))
+                    + " from_second=" + (second != null && station.canApproachFrom(second));
+        }
+
+        /** The x of the station the train is meant to stop at. */
+        double stopTargetX() {
+            if (!Double.isNaN(arrivedAt)) {
+                return arrivedAt;
+            }
+            return STATION_NODE;
+        }
+
+        /**
+         * The easternmost axle of the leading vehicle: where the body actually is.
+         *
+         * <p>The train's own front is a travelling point, and it lands exactly on the station because
+         * Create moves it there. The body is moved by the wheels. Reporting both is the difference
+         * between "the schedule says it arrived" and "the vehicle is at the platform".</p>
+         */
+        double bodyFront() {
+            if (rig == null || rig.trucks.isEmpty()) {
+                return Double.NaN;
+            }
+            double worst = -Double.MAX_VALUE;
+            for (Vec axle : rig.axles()) {
+                worst = Math.max(worst, axle.x());
+            }
+            return worst;
+        }
+
+        /** Where the front of the train is on the rail, in world x. */
+        double front() {
+            if (train == null || train.carriages.isEmpty()) {
+                return Double.NaN;
+            }
+            return train.carriages.get(0).getLeadingPoint().getPosition(rail.graph).x;
+        }
+
+        @Override
+        void step() {
+            if (train == null) {
+                return;
+            }
+            frontX = front();
+            bodyX = bodyFront();
+            double speed = Math.abs(train.speed);
+            topSpeed = Math.max(topSpeed, speed);
+            distanceToDestination = train.navigation.distanceToDestination;
+            scheduleState = train.runtime.state + "/" + train.runtime.currentEntry
+                    + (train.runtime.paused ? "(paused)" : "");
+            if (point == null && station != null && station.getStation() != null) {
+                point = station.getStation();
+                point.name = STATION_NAME;
+                log("station_ready id=" + point.id + " x=" + f(stationX(station)));
+            }
+            if (pointB == null && stationB != null && stationB.getStation() != null) {
+                pointB = stationB.getStation();
+                pointB.name = STATION_NAME;
+                log("station_b_ready id=" + pointB.id + " x=" + f(stationX(stationB)));
+            }
+
+            if (speed > 0.002) {
+                movingTicks++;
+            } else if (movingTicks > 20 && stopTick < 0) {
+                stopTick = ticks;
+                stopX = frontX;
+            }
+
+            // Braking starts on the first tick the speed falls after having risen above half of the
+            // best speed seen so far; that is the tick a station approach begins to bite, not the tick
+            // the train first moves.
+            if (Double.isNaN(brakeFromX) && topSpeed > 0.02 && speed < peakBeforeBrake * 0.999
+                    && peakBeforeBrake > topSpeed * 0.5) {
+                brakeFromX = frontX;
+            }
+            peakBeforeBrake = Math.max(peakBeforeBrake == 0 ? speed : peakBeforeBrake * 0.999, speed);
+
+            if (train.getCurrentStation() != null && !arrived) {
+                arrived = true;
+                arrivedAt = train.getCurrentStation() == point ? stationX(station)
+                        : train.getCurrentStation() == pointB ? stationX(stationB) : Double.NaN;
+                log("arrived front=" + f(frontX) + " station=" + f(arrivedAt)
+                        + " speed=" + f(train.speed) + " tick=" + ticks);
+            }
+
+            if (ticks == 40) {
+                log("diag conductor=" + train.hasForwardConductor()
+                        + " status_nav=" + train.status.navigation
+                        + " status_conductor=" + train.status.conductor
+                        + " path_a=" + reachable(point)
+                        + " path_b=" + reachable(pointB)
+                        + " a=" + describe(point, station)
+                        + " b=" + describe(pointB, stationB)
+                        );
+            }
+
+            if (ticks % 20 == 0) {
+                log("front=" + f(frontX) + " speed=" + f(train.speed)
+                        + " top=" + f(topSpeed) + " destination=" + f(distanceToDestination)
+                        + " state=" + scheduleState);
+            }
+        }
+
+        @Override
+        void finish() {
+            if (train == null) {
+                return;
+            }
+            double restDistance = stopTargetX() - stopX;
+            if (!arrived) {
+                fail("the schedule never brought the train to the station: state=" + scheduleState
+                        + " destination=" + f(distanceToDestination) + " front=" + f(frontX));
+                return;
+            }
+            if (stopTick < 0) {
+                fail("the train arrived but never came to rest");
+                return;
+            }
+            if (Math.abs(restDistance) > 8.0) {
+                fail("the train came to rest " + f(restDistance) + " blocks from the station");
+                return;
+            }
+            pass();
+        }
+
+        @Override
+        String metrics() {
+            double restDistance = stopTargetX() - stopX;
+            double brakeDistance = Double.isNaN(brakeFromX) || Double.isNaN(stopX)
+                    ? Double.NaN : stopX - brakeFromX;
+            return "carriages=" + (train == null ? 0 : train.carriages.size())
+                    + " front_start=" + f(frontStart)
+                    + " body_start=" + f(bodyStart)
+                    + " body_at_rest=" + f(bodyX)
+                    + " body_behind_train=" + f(frontX - bodyX)
+                    + " station_at=" + f(stopTargetX())
+                    + " top_speed=" + f(topSpeed)
+                    + " moving_ticks=" + movingTicks
+                    + " brake_from=" + f(brakeFromX)
+                    + " stop_at=" + f(stopX)
+                    + " stop_error=" + f(restDistance)
+                    + " brake_distance=" + f(brakeDistance)
+                    + " arrived=" + arrived
+                    + " state=" + scheduleState
+                    + " ticks=" + ticks;
+        }
+
+        @Override
+        void cleanup() {
+            if (train != null) {
+                TrainBridge.detach(train);
+                train.navigation.cancelNavigation();
+                Create.RAILWAYS.removeTrain(train.id);
+                train.invalid = true;
+                train = null;
+            }
+            for (TestRig body : new TestRig[]{rig, middle, rear}) {
+                if (body != null) {
+                    body.remove();
+                }
+            }
+            rig = null;
+            middle = null;
+            rear = null;
+            if (rail != null) {
+                for (GlobalStation station : new GlobalStation[]{point, pointB}) {
+                    if (station != null) {
+                        rail.graph.removePoint(
+                                com.simibubi.create.content.trains.graph.EdgePointType.STATION,
+                                station.id);
+                    }
+                }
+            }
+            point = null;
+            pointB = null;
+            List<BlockPos> removedBlocks = new ArrayList<>();
+            removedBlocks.add(stationPos);
+            removedBlocks.add(stationBPos);
+            for (BlockPos pos : removedBlocks) {
+                if (pos != null) {
+                    level.setBlockAndUpdate(pos, net.minecraft.world.level.block.Blocks.AIR
+                            .defaultBlockState());
+                    level.setChunkForced(pos.getX() >> 4, pos.getZ() >> 4, false);
+                }
+            }
+            List<BlockPos> removedTracks = new ArrayList<>();
+            removedTracks.add(stationTrack);
+            removedTracks.add(stationBTrack);
+            for (BlockPos pos : removedTracks) {
+                if (pos != null) {
+                    TestRig.clearBlock(level, pos);
+                }
+            }
+            station = null;
+            stationB = null;
+            stationPos = null;
+            stationBPos = null;
+            stationTrack = null;
+            stationBTrack = null;
+            if (rail != null) {
+                rail.remove();
+                rail = null;
+            }
+        }
+    }
+
+    /**
      * Three vehicles, two springs, one traction truck: the consist a claim about trains has to cover.
      *
      * <p>The pair scenario proves that one coupling holds a wagon. That is not the same claim as
@@ -1767,10 +2266,12 @@ public final class SelfTest {
             if (rig == null || train == null || bridged.size() != bodies.size()) {
                 return;
             }
-            if (entitiesStart < 0) {
-                // The baseline is taken on the first tick that can see the reference entity: an
-                // entity added during this scenario's begin() is still pending, and a count of zero
-                // at both ends of the run is a check that cannot fail.
+            if (entitiesStart < 0 && ticks >= 40) {
+                // The baseline is taken after two seconds, not on the first tick. An entity added
+                // during this scenario's begin() is still pending then, and entities the world loads
+                // or the previous scenario left behind - a villager near spawn, an item a broken
+                // block dropped - appear a little later and were counted as a leak. Two seconds is
+                // longer than any of those delays and far shorter than the run.
                 int live = countEntities();
                 if (live >= 1) {
                     entitiesStart = live;
@@ -1848,7 +2349,7 @@ public final class SelfTest {
             }
             if (entitiesEnd > entitiesStart) {
                 fail("the level gained entities while nothing was spawned: " + entitiesStart
-                        + " -> " + entitiesEnd);
+                        + " -> " + entitiesEnd + " [" + entitySummary() + "]");
                 return;
             }
             if (drift > 0.5) {
@@ -1879,6 +2380,19 @@ public final class SelfTest {
                     new ItemStack(Items.STICK));
             marker.setNoGravity(true);
             level.addFreshEntity(marker);
+        }
+
+        /** What is in the level, so a leak names itself instead of being a number. */
+        private String entitySummary() {
+            StringBuilder text = new StringBuilder();
+            for (var entity : level.getEntities().getAll()) {
+                if (text.length() > 0) {
+                    text.append(' ');
+                }
+                text.append(entity.getType().toString()).append('@')
+                        .append(entity.blockPosition().toShortString());
+            }
+            return text.toString();
         }
 
         private int countEntities() {
@@ -1917,6 +2431,7 @@ public final class SelfTest {
                     + " drift_max=" + f(drift)
                     + " entities_start=" + entitiesStart
                     + " entities_end=" + entitiesEnd
+                    + " entities=[" + entitySummary() + "]"
                     + " reference_entity_alive=" + markerAlive
                     + " contraption_entities=" + contraptions
                     + " heap_start_mb=" + (heapStart >> 20)

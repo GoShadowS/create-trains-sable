@@ -227,9 +227,10 @@ before they are visible in the world.
 
 Every push runs three things, and the build fails if any of them fails: the mod compiles and 18 unit
 tests of the rail contact and the coupling arithmetic pass; a dedicated server loads the mod and
-reaches `Done (`; and a physics session runs nine scenarios - assembly, guidance, traction,
-derailment, bridging, bridging on and off by hand, a pulled wagon, a three-vehicle consist, and a
-minute of a three-vehicle consist - and prints a line per scenario.
+reaches `Done (`; and a physics session runs eleven scenarios - assembly, guidance, traction,
+derailment, bridging, bridging on and off by hand, a pulled wagon, a three-vehicle consist, the
+driver a bridged consist reports to Create, a three-vehicle consist walking to a station on a real
+schedule, and a minute of a three-vehicle consist - and prints a line per scenario.
 
 Those sessions are the project's own measurement, and their numbers belong to the pull request that
 changed the behaviour, not to this file: a README full of measurements from last month is worse than

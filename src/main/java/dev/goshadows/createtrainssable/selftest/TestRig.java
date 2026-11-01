@@ -1,6 +1,13 @@
 package dev.goshadows.createtrainssable.selftest;
 
+import com.simibubi.create.AllBlocks;
+import com.simibubi.create.content.trains.station.StationBlockEntity;
+import com.simibubi.create.content.trains.track.TrackBlock;
+import com.simibubi.create.content.trains.track.TrackShape;
+import com.simibubi.create.content.trains.track.TrackTargetingBehaviour;
 import com.simibubi.create.Create;
+import com.simibubi.create.content.contraptions.actors.trainControls.ControlsBlock;
+import com.simibubi.create.content.processing.burner.BlazeBurnerBlock;
 import com.simibubi.create.content.trains.entity.TravellingPoint;
 import com.simibubi.create.content.trains.graph.TrackEdge;
 import com.simibubi.create.content.trains.graph.TrackGraph;
@@ -21,6 +28,9 @@ import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.storage.SubLevelRemovalReason;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Unit;
 import net.minecraft.world.level.block.Blocks;
@@ -73,9 +83,9 @@ final class TestRig {
         final TrackGraph graph;
         final double z;
         final double y;
-        final int fromX;
+        final double fromX;
 
-        private Rail(ServerLevel level, TrackGraph graph, double z, double y, int fromX) {
+        private Rail(ServerLevel level, TrackGraph graph, double z, double y, double fromX) {
             this.level = level;
             this.graph = graph;
             this.z = z;
@@ -130,7 +140,94 @@ final class TestRig {
      * @param z     centre line of the rail
      */
     static Rail rail(ServerLevel level, int fromX, int toX, int y, double z) {
+        return rail(level, (double) fromX, toX, y, z);
+    }
+
+    /**
+     * Places a rail whose nodes sit on block centres.
+     *
+     * <p>A station or a signal is a block beside the track, and Create locates it by looking for a
+     * graph node at the centre of the block it points at. A node at a whole number can never be a
+     * block centre - those are always at x.5 - so a rail that has to carry a station starts on a half
+     * block, and that is the only difference from {@link #rail(ServerLevel, int, int, int, double)}.</p>
+     */
+    static Rail rail(ServerLevel level, double fromX, int toX, int y, double z) {
         return new Rail(level, buildRail(level, fromX, toX, y, z), z, y, fromX);
+    }
+
+    /**
+     * The block a graph node at {@code nodeX} lies in the centre of.
+     *
+     * @param nodeX x of the node, on a half block
+     * @param y     height of the rail head
+     * @param z     the scenario's northern edge; the rail centre is one and a half blocks in
+     */
+    static BlockPos trackBlock(double nodeX, int y, int z) {
+        return new BlockPos((int) Math.floor(nodeX), y, z + 1);
+    }
+
+    /**
+     * Puts a straight east-west track block in the world without letting Create propagate it.
+     *
+     * <p>The station and the signal only read the block to know which way the track they belong to
+     * runs, and they find the graph by node position. Placing the block through the normal path would
+     * make Create build a second graph over the synthesised one, so the chunk is written directly and
+     * the block stays a plain marker with no block entity and no connections.</p>
+     */
+    static void placeStraightTrack(ServerLevel level, BlockPos pos) {
+        BlockState state = AllBlocks.TRACK.getDefaultState()
+                .setValue(TrackBlock.SHAPE, TrackShape.XO);
+        level.getChunk(pos).setBlockState(pos, state, false);
+    }
+
+    /** Removes a block placed by {@link #placeStraightTrack}. */
+    static void clearBlock(ServerLevel level, BlockPos pos) {
+        level.getChunk(pos).setBlockState(pos, Blocks.AIR.defaultBlockState(), false);
+    }
+
+    /**
+     * Places a real station block beside the track and points it at the node.
+     *
+     * <p>Create aims a station by writing the offset of the track block into the block entity, which
+     * is what the placement item does; the block entity turns that into a {@code GlobalStation} edge
+     * point on its next tick.</p>
+     */
+    static StationBlockEntity placeStation(ServerLevel level, BlockPos pos, BlockPos track) {
+        return placeStation(level, pos, track, true);
+    }
+
+    /**
+     * Places a real station, pointing it at the track from one side or the other.
+     *
+     * <p>Create lets the player choose which way the station faces when placing it, and that choice
+     * decides which of the two nodes of the track block the station belongs to. Both are offered here
+     * because the harness may not assume the answer.</p>
+     */
+    static StationBlockEntity placeStation(ServerLevel level, BlockPos pos, BlockPos track,
+                                           boolean positive) {
+        level.setBlockAndUpdate(pos, AllBlocks.TRACK_STATION.getDefaultState());
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (!(blockEntity instanceof StationBlockEntity station)) {
+            throw new IllegalStateException("no station block entity at " + pos);
+        }
+        aim(station.edgePoint, pos, track, positive);
+        return station;
+    }
+
+    /**
+     * Hands a targeting behaviour the block it must watch, the way Create's placement item does.
+     *
+     * <p>The behaviour has no setter for its target: the item writes it into the block entity's saved
+     * data, and the behaviour reads it back. Writing the same two tags and calling the same read is
+     * therefore the placement path, not a shortcut around it.</p>
+     */
+    private static void aim(TrackTargetingBehaviour<?> behaviour, BlockPos pos, BlockPos track,
+                            boolean positive) {
+        CompoundTag tag = new CompoundTag();
+        tag.put("TargetTrack", NbtUtils.writeBlockPos(track.subtract(pos)));
+        tag.putBoolean("TargetDirection", positive);
+        tag.putBoolean("Ortho", true);
+        behaviour.read(tag, behaviour.getWorld().registryAccess(), false);
     }
 
     /**
@@ -147,12 +244,27 @@ final class TestRig {
 
     /** Places a vehicle on an existing rail: driven or not, owning the rail or not. */
     static TestRig assembleOn(Rail rail, int x, int z, boolean driven, boolean ownsRail) {
+        return assembleOn(rail, x, z, driven, ownsRail, null);
+    }
+
+    /**
+     * Places a vehicle with a driver aboard.
+     *
+     * @param driverSide the direction the driver faces, in world axes, or {@code null} for a vehicle
+     *                   nobody can drive; a lit blaze burner and a train controls block are placed
+     *                   on the deck for it
+     */
+    static TestRig assembleOn(Rail rail, int x, int z, boolean driven, boolean ownsRail,
+                              Direction driverSide) {
         ServerLevel level = rail.level;
         for (int dx = 0; dx < 5; dx++) {
             for (int dz = 0; dz < 3; dz++) {
                 level.setBlockAndUpdate(new BlockPos(x + dx, (int) rail.y + 1, z + dz),
                         Blocks.SMOOTH_STONE.defaultBlockState());
             }
+        }
+        if (driverSide != null) {
+            placeDriver(level, new BlockPos(x + 2, (int) rail.y + 1, z + 1), driverSide);
         }
         List<BlockPos> truckPositions = new ArrayList<>(2);
         BlockPos firstTruck = new BlockPos(x + 1, (int) rail.y, z + 1);
@@ -194,16 +306,34 @@ final class TestRig {
                 truckPositions);
     }
 
+    /**
+     * Puts a conductor and the controls block that faces it, the way a player builds a cab.
+     *
+     * <p>Create only counts a blaze burner as a conductor while it is lit, and only counts it as the
+     * driver of one end when a train controls block sits on that side and faces back at it, so both
+     * blocks are placed here rather than a marker entity.</p>
+     */
+    private static void placeDriver(ServerLevel level, BlockPos pos, Direction facing) {
+        BlockState burner = AllBlocks.BLAZE_BURNER.get()
+                .defaultBlockState()
+                .setValue(BlazeBurnerBlock.HEAT_LEVEL, BlazeBurnerBlock.HeatLevel.KINDLED);
+        level.setBlockAndUpdate(pos, burner);
+        BlockState controls = AllBlocks.TRAIN_CONTROLS.get()
+                .defaultBlockState()
+                .setValue(ControlsBlock.FACING, facing.getOpposite());
+        level.setBlockAndUpdate(pos.relative(facing), controls);
+    }
+
     private static void placeTruck(ServerLevel level, BlockPos pos, TruckBlock block) {
         BlockState state = block.defaultBlockState().setValue(TruckBlock.FACING, Direction.EAST);
         level.setBlockAndUpdate(pos, state);
     }
 
     /** A straight rail, made of short edges the way a built one is, registered in Create's graph. */
-    private static TrackGraph buildRail(ServerLevel level, int fromX, int toX, int y, double z) {
+    private static TrackGraph buildRail(ServerLevel level, double fromX, int toX, int y, double z) {
         TrackGraph graph = new TrackGraph();
         TrackNode previous = null;
-        for (int x = fromX; x <= toX; x += NODE_SPACING) {
+        for (double x = fromX; x <= toX; x += NODE_SPACING) {
             TrackNode node = new TrackNode(new TrackNodeLocation(x, y, z).in(level.dimension()),
                     TrackGraph.nextNodeId(), new Vec3(0, 1, 0));
             graph.addNode(node);

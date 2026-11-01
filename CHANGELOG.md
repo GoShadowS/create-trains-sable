@@ -23,6 +23,26 @@ behind it.
   and watches every carriage against its body, the entity count and every axle's contact with the
   rail.
 
+### What works now, part two
+
+- **A bridged train has a driver.** Create decides whether a train may navigate by asking each
+  carriage for a conductor, and a bridged carriage has no contraption to carry one, so every bridged
+  train told Create nobody was aboard and Create's own navigation refused to move it. The rule Create
+  applies inside a contraption turned out not to be about entities at all: a lit blaze burner counts
+  when a train controls block sits on one side of it and faces away. That rule is now applied to the
+  blocks of the body, so a cab built inside a vehicle is a cab.
+- **A schedule reaches the station.** A three-vehicle consist with its only cab in the middle car
+  walks to a real station block, on a real schedule, and stops at the platform: the schedule is what
+  moves it, the station is what stops it, and the harness only measures. Measured on the committed
+  run: thirty-two blocks of approach at a tenth of the train's top speed, 0.880 blocks of braking,
+  and the train's front at the station to the millimetre.
+- **An idling axle rolls instead of braking.** The first model took energy out of an unpowered axle
+  with a viscous term of 0.8 per second, which is not what a wheel on a rail does. It became the thing
+  that decided how fast a bridged train could go - about half a metre per second whatever the train
+  asked for - and it held the vehicle so firmly that a train could not creep the last block into a
+  station. An idler now has rolling resistance like steel on steel, and holds still when it is at
+  rest.
+
 ### Renamed
 
 The mod is now called *Create: Sable 'n Rails*; it was *Create Trains Sable* before. Only the displayed
@@ -32,9 +52,11 @@ worlds, servers and modpacks keep working, and the jar is still named after the 
 
 ### Still open, and it is the next phase
 
-Stations and signals: Create's navigation needs a conductor, and a bridged carriage still has no
-contraption to carry one. Then riders, then derailment reported to Create when a vehicle leaves the
-rail - see the roadmap in `README.md`.
+Signals: a red signal has not been measured yet. Create only lets a train navigate through a signal
+boundary when both sides of it carry a signal block, and on the harness's straight rail the two
+blocks of such a pair do not merge into one boundary, so the check that would prove a physical train
+stops for a red light needs a rail with real track blocks first. Then riders, then derailment
+reported to Create when a vehicle leaves the rail - see the roadmap in `README.md`.
 
 ## `0.1.0-alpha` - the alpha
 

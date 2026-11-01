@@ -55,7 +55,7 @@ Java 21 is required. There is no Fabric build, no Loom, and no second source set
 
 ## Drawing and replacing a texture
 
-The textures are All Rights Reserved (`ASSETS_LICENSE`), so a texture you add has to be drawn by you:
+The textures are All Rights Reserved (`LICENSE-ARR`), so a texture you add has to be drawn by you:
 copying, tracing or recolouring a Create texture - or an existing one from this mod - is not
 acceptable. The full procedure:
 
@@ -102,7 +102,7 @@ reason to keep them: git remembers.
 ## Attribution and licence
 
 The code is Apache-2.0 and the assets are All Rights Reserved; the split is spelled out in
-`ASSETS_LICENSE` and in the "Licence and attribution" section of `README.md`. Keep the `NOTICE` file,
+`LICENSE-ARR` and in the "Licence and attribution" section of `README.md`. Keep the `NOTICE` file,
 the "Original project" section of the README and the copyright line in every fork and every
 redistribution, and if you modify a file, say so in that file, as Apache-2.0 section 4(b) requires.
 

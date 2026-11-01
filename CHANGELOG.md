@@ -67,10 +67,12 @@ short:
 
 ### Licensing
 
-- Code: Apache License 2.0 (`LICENSE`), with a `NOTICE` that must travel with every copy.
+- Code: Apache License 2.0 (`LICENSE-APACHE`), with a `NOTICE` that must travel with every copy.
 - Assets - textures, models, blockstates, language files under
-  `src/main/resources/assets/createtrainssable/`: All Rights Reserved (`ASSETS_LICENSE`).
-- Both were MIT before `0.1.0-alpha`; the change is recorded here rather than quietly.
+  `src/main/resources/assets/createtrainssable/`: All Rights Reserved (`LICENSE-ARR`).
+- The two files are named after their licences, so which one covers what is visible without opening
+  either of them. Both were MIT before `0.1.0-alpha`; the change is recorded here rather than
+  quietly.
 
 ### Influences
 

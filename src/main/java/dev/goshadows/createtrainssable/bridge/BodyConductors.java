@@ -113,13 +113,59 @@ public final class BodyConductors {
                 }
             }
         }
-        return "bounds=" + bounds.minX() + "," + bounds.minY() + "," + bounds.minZ() + ".."
+        String where = "bounds=" + bounds.minX() + "," + bounds.minY() + "," + bounds.minZ() + ".."
                 + bounds.maxX() + "," + bounds.maxY() + "," + bounds.maxZ()
                 + " volume=" + bounds.volume()
                 + " non_air=" + nonAir + " burners=" + burners + " lit=" + lit
                 + " controls=" + controls + " conductors=" + conductors
                 + " axis=" + (forward == null ? null : localAxis(body, forward))
                 + " sides=" + of(body, forward);
+        return where + chunksOf(body);
+    }
+
+    /** Where the plot keeps its chunks and what space their blocks are in, for the harness. */
+    private static String chunksOf(ServerSubLevel body) {
+        StringBuilder text = new StringBuilder();
+        text.append(" loaded_chunks=").append(body.getPlot().getLoadedChunks().size());
+        int seen = 0;
+        for (var holder : body.getPlot().getLoadedChunks()) {
+            if (seen >= 2) {
+                break;
+            }
+            seen++;
+            var chunk = holder.getChunk();
+            ChunkPos pos = chunk.getPos();
+            text.append(" chunk=").append(pos.x).append(",").append(pos.z).append("(");
+            String sample = "none";
+            int nonAir = 0;
+            var sections = chunk.getSections();
+            for (int index = 0; index < sections.length; index++) {
+                var section = sections[index];
+                if (section == null || section.hasOnlyAir()) {
+                    continue;
+                }
+                int sectionY = chunk.getSectionYFromSectionIndex(index);
+                for (int ox = 0; ox < 16; ox++) {
+                    for (int oy = 0; oy < 16; oy++) {
+                        for (int oz = 0; oz < 16; oz++) {
+                            BlockState state = section.getBlockState(ox, oy, oz);
+                            if (state.isAir()) {
+                                continue;
+                            }
+                            nonAir++;
+                            if (sample.equals("none")) {
+                                sample = state.getBlock().getName().getString()
+                                        + "@" + (pos.getMinBlockX() + ox)
+                                        + "," + (sectionY * 16 + oy)
+                                        + "," + (pos.getMinBlockZ() + oz);
+                            }
+                        }
+                    }
+                }
+            }
+            text.append("non_air=").append(nonAir).append(" sample=").append(sample).append(")");
+        }
+        return text.toString();
     }
 
     /**

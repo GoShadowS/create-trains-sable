@@ -9,6 +9,7 @@ import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.graph.DimensionPalette;
 import com.simibubi.create.content.trains.schedule.Schedule;
 import com.simibubi.create.content.trains.schedule.ScheduleEntry;
+import com.simibubi.create.content.trains.schedule.destination.ChangeThrottleInstruction;
 import com.simibubi.create.content.trains.schedule.destination.DestinationInstruction;
 import com.simibubi.create.content.trains.signal.SignalBlockEntity;
 import com.simibubi.create.content.trains.station.GlobalStation;
@@ -1613,6 +1614,8 @@ public final class SelfTest {
         /** The same station facing the other way, further along, so a wrong face cannot hide it. */
         static final double STATION_B_NODE = 2064.5;
         static final String STATION_NAME = "harness";
+        /** Line speed of the run, in per cent of the train's top speed. */
+        static final int THROTTLE_PERCENT = 10;
         static final int REAR_X = 2000;
         static final int MIDDLE_X = 2010;
         static final int FRONT_X = 2020;
@@ -1625,14 +1628,13 @@ public final class SelfTest {
         Train train;
         StationBlockEntity station;
         StationBlockEntity stationB;
-        SignalBlockEntity signalA;
-        SignalBlockEntity signalB;
+        final List<SignalBlockEntity> signals = new ArrayList<>(4);
+        final List<BlockPos> signalBlockPositions = new ArrayList<>(4);
+        final List<BlockPos> signalTrackPositions = new ArrayList<>(4);
         BlockPos stationTrack;
         BlockPos stationPos;
         BlockPos stationBTrack;
         BlockPos stationBPos;
-        BlockPos signalATrack;
-        BlockPos signalB_Track;
         GlobalStation point;
         GlobalStation pointB;
         double arrivedAt = Double.NaN;
@@ -1686,11 +1688,16 @@ public final class SelfTest {
                     placeSignals();
                 }
 
+                // A line speed a physical train can actually hold, set the way a player sets it: a
+                // throttle instruction in the schedule, not a number hidden in the harness.
+                ChangeThrottleInstruction throttle = new ChangeThrottleInstruction();
+                throttle.getData().putInt("Value", THROTTLE_PERCENT);
                 DestinationInstruction instruction = new DestinationInstruction();
                 instruction.getData().putString("Text", STATION_NAME);
-                ScheduleEntry entry = new ScheduleEntry(instruction, new ArrayList<>());
-                Schedule schedule = new Schedule(new ArrayList<>(List.of(entry)), false, 0);
-                train.runtime.setSchedule(schedule, false);
+                List<ScheduleEntry> entries = new ArrayList<>(2);
+                entries.add(new ScheduleEntry(throttle, new ArrayList<>()));
+                entries.add(new ScheduleEntry(instruction, new ArrayList<>()));
+                train.runtime.setSchedule(new Schedule(entries, false, 0), false);
                 frontStart = front();
             } catch (RuntimeException | LinkageError e) {
                 CreateTrainsSable.LOGGER.error("CTS SELFTEST scenario={} could not build", name, e);
@@ -1710,6 +1717,26 @@ public final class SelfTest {
 
         /** Signals, for the scenario that has them; overridden. */
         void placeSignals() {
+        }
+
+        /**
+         * Places one signal facing each way at a node, so the boundary has a block entity on both
+         * sides.
+         *
+         * <p>Create asks a signal boundary whether a train may navigate through it, and the answer is
+         * "only if the far side has a signal block entity of its own". A signal placed on one side
+         * alone therefore blocks the route entirely rather than turning it red - which is what the
+         * first run of this scenario showed: no path at all. A signal a player builds across a track
+         * is a pair, and the harness builds the pair.</p>
+         */
+        void addSignal(double node) {
+            BlockPos track = placeTrack(node);
+            signalTrackPositions.add(track);
+            for (boolean positive : new boolean[]{true, false}) {
+                BlockPos pos = positive ? track.above() : track.north();
+                signals.add(TestRig.placeSignal(level, pos, track, true, positive));
+                signalBlockPositions.add(pos);
+            }
         }
 
         /** The x of the track block a station stands beside, which is where a train stops. */
@@ -1743,20 +1770,25 @@ public final class SelfTest {
                     + " from_second=" + (second != null && station.canApproachFrom(second));
         }
 
-        /** What Create made of a signal block: its point, its group and the state it reports. */
-        String describeSignal(String label, SignalBlockEntity signal) {
-            if (signal == null) {
-                return label + "=none";
+        /** What Create made of the signal blocks: their boundary, its blocks and the state it reports. */
+        String describeSignals() {
+            StringBuilder text = new StringBuilder();
+            for (SignalBlockEntity signal : signals) {
+                if (text.length() > 0) {
+                    text.append(' ');
+                }
+                var boundary = signal.getSignal();
+                text.append('@').append(f(signalX(signal)))
+                        .append(" state=").append(signal.getState())
+                        .append(" boundary=").append(boundary != null)
+                        .append(" blocks=").append(boundary == null ? 0
+                                : boundary.blockEntities.getFirst().size()
+                                + boundary.blockEntities.getSecond().size())
+                        .append(" forced_red=")
+                        .append(boundary != null && (boundary.isForcedRed(true)
+                                || boundary.isForcedRed(false)));
             }
-            var boundary = signal.getSignal();
-            int points = boundary == null ? 0 : boundary.blockEntities.getFirst().size()
-                    + boundary.blockEntities.getSecond().size();
-            return label + "@" + f(signalX(signal))
-                    + " state=" + signal.getState()
-                    + " boundary=" + (boundary != null)
-                    + " blocks=" + points
-                    + " group=" + (boundary == null ? "-" : boundary.groups.getFirst())
-                    + " forced_red=" + (boundary != null && boundary.isForcedRed(true));
+            return signals.isEmpty() ? "none" : text.toString();
         }
 
         /** The x of the node whose signal this train is waiting for, or NaN. */
@@ -1765,8 +1797,8 @@ public final class SelfTest {
             if (waiting == null) {
                 return Double.NaN;
             }
-            for (SignalBlockEntity signal : new SignalBlockEntity[]{signalA, signalB}) {
-                var boundary = signal == null ? null : signal.getSignal();
+            for (SignalBlockEntity signal : signals) {
+                var boundary = signal.getSignal();
                 if (boundary != null && boundary.getId().equals(waiting.getFirst())) {
                     return signalX(signal);
                 }
@@ -1849,7 +1881,7 @@ public final class SelfTest {
             }
 
             if (ticks == 40) {
-                signalReport = describeSignal("a", signalA) + " " + describeSignal("b", signalB);
+                signalReport = describeSignals();
                 log("diag conductor=" + train.hasForwardConductor()
                         + " status_nav=" + train.status.navigation
                         + " status_conductor=" + train.status.conductor
@@ -1963,31 +1995,33 @@ public final class SelfTest {
             }
             point = null;
             pointB = null;
-            for (BlockPos pos : new BlockPos[]{stationPos, stationBPos,
-                    signalATrack == null ? null : signalATrack.above(),
-                    signalB_Track == null ? null : signalB_Track.above()}) {
+            List<BlockPos> removedBlocks = new ArrayList<>(signalBlockPositions);
+            removedBlocks.add(stationPos);
+            removedBlocks.add(stationBPos);
+            for (BlockPos pos : removedBlocks) {
                 if (pos != null) {
                     level.setBlockAndUpdate(pos, net.minecraft.world.level.block.Blocks.AIR
                             .defaultBlockState());
                     level.setChunkForced(pos.getX() >> 4, pos.getZ() >> 4, false);
                 }
             }
-            for (BlockPos pos : new BlockPos[]{stationTrack, stationBTrack, signalATrack,
-                    signalB_Track}) {
+            List<BlockPos> removedTracks = new ArrayList<>(signalTrackPositions);
+            removedTracks.add(stationTrack);
+            removedTracks.add(stationBTrack);
+            for (BlockPos pos : removedTracks) {
                 if (pos != null) {
                     TestRig.clearBlock(level, pos);
                 }
             }
             station = null;
             stationB = null;
-            signalA = null;
-            signalB = null;
+            signals.clear();
+            signalBlockPositions.clear();
+            signalTrackPositions.clear();
             stationPos = null;
             stationBPos = null;
             stationTrack = null;
             stationBTrack = null;
-            signalATrack = null;
-            signalB_Track = null;
             if (rail != null) {
                 rail.remove();
                 rail = null;
@@ -2016,10 +2050,8 @@ public final class SelfTest {
 
         @Override
         void placeSignals() {
-            signalATrack = placeTrack(SIGNAL_A_NODE);
-            signalA = TestRig.placeSignal(level, signalATrack.above(), signalATrack, true);
-            signalB_Track = placeTrack(SIGNAL_B_NODE);
-            signalB = TestRig.placeSignal(level, signalB_Track.above(), signalB_Track, true, false);
+            addSignal(SIGNAL_A_NODE);
+            addSignal(SIGNAL_B_NODE);
         }
     }
 

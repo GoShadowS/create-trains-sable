@@ -56,6 +56,17 @@ public final class WheelRail {
 
     private static final Output IDLE = new Output(Vec.ZERO, State.NO_TRACK, 0.0, 0.0, 0.0);
 
+    /**
+     * Below this speed an idler is held still instead of rolling, in m/s.
+     *
+     * <p>Without it a wagon on a perfectly flat rail never quite stops, and a train cannot creep the
+     * last block into a station because the hold is as small as the creep.</p>
+     */
+    private static final double CREEP = 0.02;
+
+    /** Rolling resistance of steel on steel, as a deceleration in m/s^2: about 0.002 g. */
+    private static final double ROLLING_RESISTANCE = 0.02;
+
     private WheelRail() {
     }
 
@@ -136,8 +147,17 @@ public final class WheelRail {
                     Math.min(settings.traction(), adhesion));
             alongShare = Math.max(1, drivenCount);
         } else {
-            // An idler does not pull: it only takes energy out of the vehicle.
-            demand = clamp(-along * 0.8, -settings.brake(), 0.0);
+            // An idler does not pull; it loses speed and it holds still. The first draft of this
+            // line took energy out with a viscous term of 0.8 per second, which is not what a wheel
+            // on a rail does: it made a coasting vehicle lose 0.8 m/s every second, and because that
+            // term grows with speed it became the thing that decided how fast a bridged train could
+            // go - measured 0.5 m/s whatever the train asked for, and a train that could not creep
+            // the last block into a station. Steel on steel is very nearly frictionless: rolling
+            // resistance is a small constant deceleration, and at rest the axle simply stays put.
+            demand = Math.abs(along) < CREEP
+                    ? clamp(-along * 20.0, -settings.brake(), 0.0)
+                    : clamp(-Math.signum(along) * ROLLING_RESISTANCE - along * 0.02,
+                            -settings.brake(), 0.0);
             alongShare = Math.max(1, truckCount);
         }
 

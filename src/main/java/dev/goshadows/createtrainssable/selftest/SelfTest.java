@@ -1677,11 +1677,11 @@ public final class SelfTest {
                 TrainBridge.bridge(train, List.of(rig.body, middle.body, rear.body));
 
                 stationTrack = placeTrack(STATION_NODE);
-                stationPos = stationTrack.above();
+                stationPos = beside(stationTrack);
                 station = TestRig.placeStation(level, stationPos, stationTrack, false);
 
                 stationBTrack = placeTrack(STATION_B_NODE);
-                stationBPos = stationBTrack.above();
+                stationBPos = beside(stationBTrack);
                 stationB = TestRig.placeStation(level, stationBPos, stationBTrack, true);
 
                 if (wantsSignal) {
@@ -1706,12 +1706,23 @@ public final class SelfTest {
             }
         }
 
+        /**
+         * Where a station or a signal stands: beside the track, not on it.
+         *
+         * <p>The first run of this scenario put the block above the track, which is inside the
+         * vehicle: the consist rolled up to it and stopped dead one block short, and the signal
+         * scenario never moved at all. A station is a block beside the rails on a platform.</p>
+         */
+        BlockPos beside(BlockPos track) {
+            return track.offset(0, 0, 2);
+        }
+
         /** A real track block on a node, in a chunk the scenario keeps loaded for its block entity. */
         BlockPos placeTrack(double node) {
             BlockPos track = TestRig.trackBlock(node, RAIL_Y, z);
             TestRig.placeStraightTrack(level, track);
-            BlockPos above = track.above();
-            level.setChunkForced(above.getX() >> 4, above.getZ() >> 4, true);
+            BlockPos nearby = beside(track);
+            level.setChunkForced(nearby.getX() >> 4, nearby.getZ() >> 4, true);
             return track;
         }
 
@@ -1733,9 +1744,10 @@ public final class SelfTest {
             BlockPos track = placeTrack(node);
             signalTrackPositions.add(track);
             for (boolean positive : new boolean[]{true, false}) {
-                BlockPos pos = positive ? track.above() : track.north();
+                BlockPos pos = positive ? beside(track) : track.offset(0, 0, -2);
                 signals.add(TestRig.placeSignal(level, pos, track, true, positive));
                 signalBlockPositions.add(pos);
+                level.setChunkForced(pos.getX() >> 4, pos.getZ() >> 4, true);
             }
         }
 

@@ -203,6 +203,13 @@ gravity = 9.81               # fallback gravity, used when Sable has none for th
 logTrucks = false            # log the state of every truck once a second
 ```
 
+## Getting help
+
+Bugs, questions and requests go to
+[the issue tracker](https://github.com/GoShadowS/create-trains-sable/issues). When reporting a
+crash, attach the log - a bridged train's problems are almost always visible in the physics lines
+before they are visible in the world.
+
 ## Is it tested?
 
 Every push runs three things, and the build fails if any of them fails: the mod compiles and 18 unit

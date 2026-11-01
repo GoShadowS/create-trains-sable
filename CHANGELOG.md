@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.2-alpha.2 - one licence field still said MIT
+
+`gradle.properties` carried `mod_license=MIT` from before the relicence. Nothing reads the property
+(`build.gradle` takes the licence from `neoforge.mods.toml`, which already said `Apache-2.0`), so no
+jar was mislabelled - but a file in the repository stating the wrong licence is exactly the kind of
+thing a fork copies. Fixed to `Apache-2.0`, and the whole tree was re-checked for `MIT` strings: every
+remaining one is in `README.md`'s licence comparison or in the historical notes above, where MIT is
+being discussed rather than declared.
+
+No behaviour change: `scenarios=8 passed=8 failed=0`, 18 unit tests.
+
 ## 0.4.2-alpha.1 - the version number now says "alpha", the licence now requires a name
 
 ### Version numbering was wrong, and is corrected retroactively

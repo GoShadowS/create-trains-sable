@@ -80,6 +80,57 @@ public final class BodyConductors {
         return sides;
     }
 
+    /**
+     * A one-line description of what the scan saw, for the harness.
+     *
+     * <p>It exists because "no driver found" has several very different causes - an empty bounding
+     * box, a block accessor looking at the wrong coordinates, a burner that is not lit, a controls
+     * block facing the wrong way - and a failed assertion alone does not say which.</p>
+     */
+    public static String probe(ServerSubLevel body, Vec3 forward) {
+        if (!(body instanceof KinematicContraption contraption)) {
+            return "not a contraption";
+        }
+        BoundingBox3ic bounds = body.getPlot().getBoundingBox();
+        BlockGetter blocks = contraption.sable$blockGetter();
+        Direction axis = forward == null ? null : localAxis(body, forward);
+        if (blocks == null) {
+            return "no block getter; bounds volume=" + bounds.volume();
+        }
+        int nonAir = 0;
+        int conductors = 0;
+        int controls = 0;
+        int lit = 0;
+        if (bounds.volume() > 0 && bounds.volume() <= MAX_BLOCKS) {
+            for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+                for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+                    for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
+                        BlockState state = blocks.getBlockState(new BlockPos(x, y, z));
+                        if (state.isAir()) {
+                            continue;
+                        }
+                        nonAir++;
+                        if (AllBlocks.TRAIN_CONTROLS.has(state)) {
+                            controls++;
+                        }
+                        if (AllBlocks.BLAZE_BURNER.has(state)) {
+                            lit++;
+                        }
+                        if (isConductor(state)) {
+                            conductors++;
+                        }
+                    }
+                }
+            }
+        }
+        return "bounds=" + bounds.minX() + "," + bounds.minY() + "," + bounds.minZ() + ".."
+                + bounds.maxX() + "," + bounds.maxY() + "," + bounds.maxZ()
+                + " volume=" + bounds.volume()
+                + " non_air=" + nonAir + " burners=" + lit + " controls=" + controls
+                + " conductors=" + conductors + " axis=" + axis
+                + " sides=" + of(body, forward);
+    }
+
     /** Whether a train controls block sits on {@code side} of {@code pos} and faces away from it. */
     private static boolean inControl(BlockGetter blocks, BlockPos pos, Direction side) {
         BlockState control = blocks.getBlockState(pos.relative(side));

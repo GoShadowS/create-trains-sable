@@ -1467,6 +1467,7 @@ public final class SelfTest {
         private boolean forward;
         private boolean backward;
         private boolean checked;
+        private String probe = "";
 
         ConductorsScenario() {
             super("conductors", END, 2552);
@@ -1500,6 +1501,12 @@ public final class SelfTest {
             train.targetSpeed = 0.0;
             if (ticks < 5) {
                 return;
+            }
+            if (probe.isEmpty() && !train.carriages.isEmpty()
+                    && train.carriages.get(1) instanceof BridgedCarriage middleCarriage) {
+                Vec direction = rig == null ? Vec.ZERO : Vec.of(1, 0, 0);
+                probe = dev.goshadows.createtrainssable.bridge.BodyConductors.probe(
+                        middleCarriage.body().body(), new Vec3(direction.x(), 0, direction.z()));
             }
             forward = train.hasForwardConductor();
             backward = train.hasBackwardConductor();
@@ -1547,6 +1554,7 @@ public final class SelfTest {
                     + " forward=" + forward + " backward=" + backward
                     + " carriage_forward=" + Arrays.toString(perCarriageForward)
                     + " carriage_backward=" + Arrays.toString(perCarriageBackward)
+                    + " probe=\"" + probe + "\""
                     + " ticks=" + ticks;
         }
 

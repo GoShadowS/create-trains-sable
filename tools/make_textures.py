@@ -261,5 +261,5 @@ if __name__ == "__main__":
     for name, painter in TEXTURES.items():
         write_png(os.path.join(target, name + ".png"), painter())
         print("wrote", os.path.join(target, name + ".png"))
-    preview("/home/user/create-trains-sable-textures.png")
+    preview("/home/user/sable-n-rails-textures.png")
     print("wrote preview")

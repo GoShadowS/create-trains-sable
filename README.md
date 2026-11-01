@@ -1,8 +1,12 @@
-# Create Trains Sable
+# Create: Sable 'n Rails
 
 ## Original project
 
 **Author and original repository: GoShadowS - https://github.com/GoShadowS/create-trains-sable**
+
+The mod was called *Create Trains Sable* until the phase that made a whole consist work; it is now
+*Create: Sable 'n Rails*. The name changed, the mod did not: the mod id, the registry names and the
+resource paths are unchanged, so a world, a server or a modpack that already has it keeps working.
 
 Copyright 2026 GoShadowS. The code is licensed under the Apache License, Version 2.0 (`LICENSE-APACHE`); the
 textures, models and other assets are All Rights Reserved (`LICENSE-ARR`). The `NOTICE` file must

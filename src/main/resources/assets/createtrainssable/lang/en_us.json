@@ -5,7 +5,7 @@
   "createtrainssable.configuration.couplings.tooltip": "Spring couplings between vehicles.",
   "createtrainssable.configuration.debug": "Diagnostics",
   "createtrainssable.configuration.debug.tooltip": "Logging of the state of every axle.",
-  "itemGroup.createtrainssable.main": "Create Trains Sable",
+  "itemGroup.createtrainssable.main": "Create: Sable 'n Rails",
   "block.createtrainssable.traction_truck": "Traction Truck",
   "block.createtrainssable.rolling_truck": "Rolling Truck",
   "block.createtrainssable.spring_coupling": "Spring Coupling",

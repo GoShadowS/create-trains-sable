@@ -5,7 +5,7 @@
   "createtrainssable.configuration.couplings.tooltip": "Пружинные сцепки между транспортными средствами.",
   "createtrainssable.configuration.debug": "Диагностика",
   "createtrainssable.configuration.debug.tooltip": "Запись состояния каждой оси в лог.",
-  "itemGroup.createtrainssable.main": "Create Trains Sable",
+  "itemGroup.createtrainssable.main": "Create: Sable 'n Rails",
   "block.createtrainssable.traction_truck": "Тяговая тележка",
   "block.createtrainssable.rolling_truck": "Поддерживающая тележка",
   "block.createtrainssable.spring_coupling": "Пружинная сцепка",

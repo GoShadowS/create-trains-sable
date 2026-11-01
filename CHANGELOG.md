@@ -23,6 +23,13 @@ behind it.
   and watches every carriage against its body, the entity count and every axle's contact with the
   rail.
 
+### Renamed
+
+The mod is now called *Create: Sable 'n Rails*; it was *Create Trains Sable* before. Only the displayed
+name changed - window title, item group, mod list entry, log lines, the resource pack description and
+every document. The mod id, the registry names and the resource paths did not change, so existing
+worlds, servers and modpacks keep working, and the jar is still named after the mod id.
+
 ### Still open, and it is the next phase
 
 Stations and signals: Create's navigation needs a conductor, and a bridged carriage still has no

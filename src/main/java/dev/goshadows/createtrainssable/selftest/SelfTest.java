@@ -13,6 +13,7 @@ import dev.goshadows.createtrainssable.bridge.BridgedCarriage;
 import dev.goshadows.createtrainssable.bridge.CarriageBody;
 import dev.goshadows.createtrainssable.bridge.TrainBridge;
 import dev.goshadows.createtrainssable.bridge.TrainCouplings;
+import dev.goshadows.createtrainssable.bridge.TrainStress;
 import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.rail.TruckBlockEntity;
 import dev.goshadows.createtrainssable.rail.Vec;
@@ -45,8 +46,9 @@ import java.util.UUID;
  * <p>The scenarios are the contract of the mod, in order: the vehicle can be assembled and finds its
  * rail, it stays on the rail, the driven axle reaches the speed its shaft asks for, a vehicle pushed
  * off the rail keeps its momentum and falls, a Create train follows the body it is bridged to, the
- * player's bridge action binds and unbinds without damaging the train, and a coupling pulls an
- * unpowered wagon behind a powered one.</p>
+ * player's bridge action binds and unbinds without damaging the train, a coupling pulls an unpowered
+ * wagon behind a powered one, three vehicles hold together through two couplings, and a consist of
+ * three runs for a minute without growing.</p>
  */
 public final class SelfTest {
 
@@ -86,6 +88,7 @@ public final class SelfTest {
                 new BridgeScenario(),
                 new EntryScenario(),
                 new CoupleScenario(),
+                new ChainScenario(),
                 new SoakScenario());
 
         private int index = -1;
@@ -287,6 +290,46 @@ public final class SelfTest {
         Carriage carriage = new Carriage(leading, trailing, 2);
         Train train = new Train(UUID.randomUUID(), UUID.randomUUID(), rig.graph,
                 new ArrayList<>(List.of(carriage)), new ArrayList<>(), true, 0);
+        Create.RAILWAYS.addTrain(train);
+        return train;
+    }
+
+    /**
+     * One carriage sitting on the two axles of a rig whose deck starts at {@code x}.
+     *
+     * <p>A standard bogey's two wheel points are two blocks apart, and the leading bogey is the one
+     * nearer the front of the train, so the names are not arbitrary: the carriage travels towards
+     * increasing x the way the rig's traction truck does.</p>
+     */
+    private static Carriage carriageOn(TestRig rig, int x) {
+        CarriageBogey leading = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
+                rig.railPoint(x + 4.5), rig.railPoint(x + 2.5));
+        CarriageBogey trailing = new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false, new CompoundTag(),
+                rig.railPoint(x + 2.5), rig.railPoint(x + 0.5));
+        return new Carriage(leading, trailing, 2);
+    }
+
+    /**
+     * A Create train with one carriage per rig, ordered the way the rigs are given: leading first.
+     *
+     * <p>The spacing is whatever the carriages' own points measure, which is what a player's train
+     * has, rather than a number chosen to make a measurement come out right.</p>
+     */
+    private static Train trainOf(List<TestRig> rigs, int[] deckX) {
+        List<Carriage> carriages = new ArrayList<>(rigs.size());
+        for (int i = 0; i < rigs.size(); i++) {
+            carriages.add(carriageOn(rigs.get(i), deckX[i]));
+        }
+        List<Integer> spacings = new ArrayList<>(Math.max(0, rigs.size() - 1));
+        for (int i = 1; i < carriages.size(); i++) {
+            double gap = carriages.get(i - 1)
+                    .getTrailingPoint()
+                    .getPosition(rigs.get(0).graph)
+                    .distanceTo(carriages.get(i).getLeadingPoint().getPosition(rigs.get(0).graph));
+            spacings.add((int) Math.round(gap));
+        }
+        Train train = new Train(UUID.randomUUID(), UUID.randomUUID(), rigs.get(0).graph,
+                new ArrayList<>(carriages), new ArrayList<>(spacings), true, 0);
         Create.RAILWAYS.addTrain(train);
         return train;
     }
@@ -1395,6 +1438,258 @@ public final class SelfTest {
 
 
     /**
+     * Three vehicles, two springs, one traction truck: the consist a claim about trains has to cover.
+     *
+     * <p>The pair scenario proves that one coupling holds a wagon. That is not the same claim as
+     * "a train works": in a chain the middle body is pulled from the front and pulls the rear one in
+     * turn, so an error that a single spring absorbs - a gap that creeps, a damper that fights itself,
+     * a coupling indexed against the wrong neighbour - shows up here and nowhere else. Both gaps are
+     * measured separately, and both are compared with what the bridge publishes into Create's own
+     * deformation array, so the number Create would show is checked against the gap it describes.</p>
+     */
+    private static final class ChainScenario extends Scenario {
+
+        private static final double COMMAND = 0.08;
+        /** Ticks of settled running at the end of the scenario, used for every convergence number. */
+        private static final int SETTLE_TICKS = 200;
+        private static final int END = 600;
+        private static final int REAR_X = 2000;
+        private static final int MIDDLE_X = 2010;
+        private static final int FRONT_X = 2020;
+        private static final int RAIL_FROM = 1960;
+        private static final int RAIL_TO = 2200;
+
+        private TestRig middle;
+        private TestRig rear;
+        private TestRig.Rail rail;
+        private Train train;
+        private TrainBridge.Bridge bridge;
+
+        private final double[] spacing = new double[2];
+        private final double[] rest = new double[2];
+        private final double[] gapStart = new double[2];
+        private final double[] gapEnd = new double[2];
+        private final double[] gapMin = {Double.MAX_VALUE, Double.MAX_VALUE};
+        private final double[] gapMax = {-Double.MAX_VALUE, -Double.MAX_VALUE};
+        private final double[] gapAtSettleStart = {Double.NaN, Double.NaN};
+        private final double[] extension = new double[2];
+        private final double[] published = new double[2];
+        private final double[] moved = new double[3];
+        private final double[] startX = new double[3];
+        private double drift01;
+        private double drift12;
+        private int ticksInContact;
+        private boolean stressPublished;
+        private boolean stressAvailable;
+
+        ChainScenario() {
+            super("chain", END, 2596);
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            this.level = level;
+            try {
+                rail = TestRig.rail(level, RAIL_FROM, RAIL_TO, 100, z + 1.5);
+                rear = TestRig.assembleOn(rail, REAR_X, z, false, false);
+                middle = TestRig.assembleOn(rail, MIDDLE_X, z, false, false);
+                rig = TestRig.assembleOn(rail, FRONT_X, z, true, false);
+                buildTrain();
+            } catch (RuntimeException | LinkageError e) {
+                CreateTrainsSable.LOGGER.error("CTS SELFTEST scenario=chain could not build", e);
+                fail("build: " + e);
+                finished = true;
+            }
+        }
+
+        /** One powered vehicle in front, two idling ones behind it, two couplings between them. */
+        private void buildTrain() {
+            List<TestRig> rigs = List.of(rig, middle, rear);
+            int[] decks = {FRONT_X, MIDDLE_X, REAR_X};
+            train = trainOf(rigs, decks);
+            train.targetSpeed = COMMAND;
+
+            bridge = TrainBridge.bridge(train, List.of(rig.body, middle.body, rear.body));
+            rest[0] = bridge.restLengths()[0];
+            rest[1] = bridge.restLengths()[1];
+            spacing[0] = train.carriageSpacing.get(0);
+            spacing[1] = train.carriageSpacing.get(1);
+
+            startX[0] = rig.centre().x();
+            startX[1] = middle.centre().x();
+            startX[2] = rear.centre().x();
+            gapStart[0] = Math.abs(startX[0] - startX[1]);
+            gapStart[1] = Math.abs(startX[1] - startX[2]);
+        }
+
+        @Override
+        void step() {
+            if (rig == null || middle == null || rear == null || train == null) {
+                return;
+            }
+            train.manualTick = true;
+            train.targetSpeed = COMMAND;
+            train.approachTargetSpeed(1.0f);
+
+            List<TrainCouplings.Report> reports = bridge.reports();
+            if (reports.size() == 2) {
+                extension[0] = reports.get(0).extension();
+                extension[1] = reports.get(1).extension();
+            }
+            stressAvailable = TrainStress.available();
+            double[] current = TrainStress.read(train);
+            if (current != null && current.length == 2) {
+                published[0] = current[0];
+                published[1] = current[1];
+                stressPublished = true;
+            }
+
+            double frontX = rig.centre().x();
+            double middleX = middle.centre().x();
+            double rearX = rear.centre().x();
+            double gap01 = Math.abs(frontX - middleX);
+            double gap12 = Math.abs(middleX - rearX);
+            if (ticks > END - SETTLE_TICKS) {
+                if (Double.isNaN(gapAtSettleStart[0])) {
+                    gapAtSettleStart[0] = gap01;
+                    gapAtSettleStart[1] = gap12;
+                }
+                gapMin[0] = Math.min(gapMin[0], gap01);
+                gapMax[0] = Math.max(gapMax[0], gap01);
+                gapMin[1] = Math.min(gapMin[1], gap12);
+                gapMax[1] = Math.max(gapMax[1], gap12);
+            }
+            if (!rig.states().contains("NO_TRACK") && !rig.states().contains("OFF_RAIL")) {
+                ticksInContact++;
+            }
+            if (ticks % 20 == 0) {
+                log("front=" + f(frontX - startX[0])
+                        + " middle=" + f(middleX - startX[1])
+                        + " rear=" + f(rearX - startX[2])
+                        + " gap01=" + f(gap01) + " gap12=" + f(gap12)
+                        + " ext01=" + f(extension[0]) + " ext12=" + f(extension[1])
+                        + " stress01=" + f(published[0]) + " stress12=" + f(published[1]));
+            }
+        }
+
+        @Override
+        void finish() {
+            if (rig == null || middle == null || rear == null || train == null) {
+                fail("no train");
+                return;
+            }
+            gapEnd[0] = Math.abs(rig.centre().x() - middle.centre().x());
+            gapEnd[1] = Math.abs(middle.centre().x() - rear.centre().x());
+            drift01 = gapEnd[0] - (Double.isNaN(gapAtSettleStart[0]) ? gapEnd[0] : gapAtSettleStart[0]);
+            drift12 = gapEnd[1] - (Double.isNaN(gapAtSettleStart[1]) ? gapEnd[1] : gapAtSettleStart[1]);
+            moved[0] = rig.centre().x() - startX[0];
+            moved[1] = middle.centre().x() - startX[1];
+            moved[2] = rear.centre().x() - startX[2];
+
+            if (rig.isRemoved() || middle.isRemoved() || rear.isRemoved()) {
+                fail("a body was removed");
+                return;
+            }
+            if (!stressAvailable) {
+                fail("Create's deformation array could not be reached, so nothing was published");
+                return;
+            }
+            if (!stressPublished) {
+                fail("the bridge never published a deformation into Create's array");
+                return;
+            }
+            if (train.derailed) {
+                fail("Create derailed the train: the couplings deformed past the limit");
+                return;
+            }
+            if (moved[0] < 2.0) {
+                fail("the leading body barely moved: " + f(moved[0]));
+                return;
+            }
+            if (moved[1] < 0.75 * moved[0]) {
+                fail("the middle body lags: front=" + f(moved[0]) + " middle=" + f(moved[1]));
+                return;
+            }
+            if (moved[2] < 0.75 * moved[0]) {
+                fail("the rear body lags: front=" + f(moved[0]) + " rear=" + f(moved[2]));
+                return;
+            }
+            if (Math.abs(drift01) > 0.05) {
+                fail("the first gap drifted " + f(drift01) + " blocks over " + SETTLE_TICKS + " ticks");
+                return;
+            }
+            if (Math.abs(drift12) > 0.05) {
+                fail("the second gap drifted " + f(drift12) + " blocks over " + SETTLE_TICKS + " ticks");
+                return;
+            }
+            if (Math.abs(extension[0]) > 1.0 || Math.abs(extension[1]) > 1.0) {
+                fail("a coupling deformed more than a block: " + f(extension[0]) + ", "
+                        + f(extension[1]));
+                return;
+            }
+            // What Create publishes must be the spring's own number with Create's sign, or the
+            // number a player reads in the train's state describes a gap that does not exist.
+            if (Math.abs(published[0] + extension[0]) > 0.05) {
+                fail("Create's stress and the spring disagree on the first gap: stress="
+                        + f(published[0]) + " extension=" + f(extension[0]));
+                return;
+            }
+            if (Math.abs(published[1] + extension[1]) > 0.05) {
+                fail("Create's stress and the spring disagree on the second gap: stress="
+                        + f(published[1]) + " extension=" + f(extension[1]));
+                return;
+            }
+            if (ticksInContact < 0.9 * ticks) {
+                fail("the bodies left the rail for " + (ticks - ticksInContact) + " ticks");
+                return;
+            }
+            pass();
+        }
+
+        @Override
+        String metrics() {
+            return "carriages=3 bodies=3"
+                    + " spacing_01=" + f(spacing[0]) + " spacing_12=" + f(spacing[1])
+                    + " rest_01=" + f(rest[0]) + " rest_12=" + f(rest[1])
+                    + " gap_01_start=" + f(gapStart[0]) + " gap_01_end=" + f(gapEnd[0])
+                    + " gap_12_start=" + f(gapStart[1]) + " gap_12_end=" + f(gapEnd[1])
+                    + " gap_01_min=" + f(gapMin[0]) + " gap_01_max=" + f(gapMax[0])
+                    + " gap_12_min=" + f(gapMin[1]) + " gap_12_max=" + f(gapMax[1])
+                    + " drift_01=" + f(drift01) + " drift_12=" + f(drift12)
+                    + " ext_01=" + f(extension[0]) + " ext_12=" + f(extension[1])
+                    + " stress_01=" + f(published[0]) + " stress_12=" + f(published[1])
+                    + " stress_published=" + stressPublished
+                    + " moved_front=" + f(moved[0]) + " moved_middle=" + f(moved[1])
+                    + " moved_rear=" + f(moved[2])
+                    + " derailed=" + (train != null && train.derailed)
+                    + " ticks=" + ticks;
+        }
+
+        @Override
+        void cleanup() {
+            if (train != null) {
+                TrainBridge.detach(train);
+                Create.RAILWAYS.removeTrain(train.id);
+                train.invalid = true;
+                train = null;
+            }
+            for (TestRig body : new TestRig[]{rig, middle, rear}) {
+                if (body != null) {
+                    body.remove();
+                }
+            }
+            rig = null;
+            middle = null;
+            rear = null;
+            if (rail != null) {
+                rail.remove();
+                rail = null;
+            }
+        }
+    }
+
+
+    /**
      * A bridged train left running for a minute of game time, watched for cost.
      *
      * <p>Suppressing a carriage's contraption entity is the one architectural choice in the bridge
@@ -1413,10 +1708,21 @@ public final class SelfTest {
         /** Slow enough that a minute of running stays inside the rig's rail. */
         private static final double COMMAND = 0.02;
         private static final int END = 1200;
+        private static final int REAR_X = 2000;
+        private static final int MIDDLE_X = 2010;
+        private static final int FRONT_X = 2020;
+        private static final int RAIL_FROM = 1960;
+        private static final int RAIL_TO = 2300;
 
+        private TestRig middle;
+        private TestRig rear;
+        private TestRig.Rail rail;
         private Train train;
-        private BridgedCarriage bridged;
-        private double startCentre;
+        private List<TestRig> bodies = new ArrayList<>(3);
+        private final List<BridgedCarriage> bridged = new ArrayList<>(3);
+        private final double[] startX = new double[3];
+        private final double[] travelled = new double[3];
+        private final double[] carriageTravelled = new double[3];
         private Entity marker;
         private boolean markerAlive;
         private int entitiesStart;
@@ -1424,8 +1730,7 @@ public final class SelfTest {
         private int contraptions;
         private long heapStart;
         private long heapEnd;
-        private double travelled;
-        private double trainTravelled;
+        private double drift;
         private double lateralMax;
         private int ticksHolding;
 
@@ -1435,16 +1740,21 @@ public final class SelfTest {
 
         @Override
         void begin(ServerLevel level) {
-            super.begin(level);
-            if (rig == null) {
-                return;
-            }
+            this.level = level;
             try {
-                train = singleCarriageTrain(rig, 2001.5, 2003.5);
+                rail = TestRig.rail(level, RAIL_FROM, RAIL_TO, 100, z + 1.5);
+                rear = TestRig.assembleOn(rail, REAR_X, z, false, false);
+                middle = TestRig.assembleOn(rail, MIDDLE_X, z, false, false);
+                rig = TestRig.assembleOn(rail, FRONT_X, z, true, false);
+                bodies = List.of(rig, middle, rear);
+                train = trainOf(bodies, new int[]{FRONT_X, MIDDLE_X, REAR_X});
                 train.targetSpeed = COMMAND;
-                TrainBridge.Bridge bridge = TrainBridge.bridge(train, rig.body);
-                bridged = bridge.carriages().getFirst();
-                startCentre = rig.centre().x();
+                TrainBridge.Bridge bridge =
+                        TrainBridge.bridge(train, List.of(rig.body, middle.body, rear.body));
+                bridged.addAll(bridge.carriages());
+                for (int i = 0; i < bodies.size(); i++) {
+                    startX[i] = bodies.get(i).centre().x();
+                }
                 spawnMarker();
                 entitiesStart = countEntities();
                 heapStart = usedHeap();
@@ -1456,28 +1766,36 @@ public final class SelfTest {
 
         @Override
         void step() {
-            if (rig == null || train == null || bridged == null) {
+            if (rig == null || train == null || bridged.size() != bodies.size()) {
                 return;
             }
             train.manualTick = true;
             train.targetSpeed = COMMAND;
             train.approachTargetSpeed(1.0f);
-            lateralMax = Math.max(lateralMax, rig.lateralError());
-            if (rig.states().contains("GUIDING")) {
-                ticksHolding++;
+            for (TestRig body : bodies) {
+                lateralMax = Math.max(lateralMax, body.lateralError());
+                if (body.states().contains("GUIDING")) {
+                    ticksHolding++;
+                }
             }
             if (ticks % 200 == 0) {
-                log("x=" + f(rig.centre().x() - startCentre)
-                        + " speed=" + f(bridged.measuredSpeed())
-                        + " entities=" + countEntities()
-                        + " heap_mb=" + (usedHeap() >> 20)
-                        + " " + states());
+                StringBuilder line = new StringBuilder();
+                for (int i = 0; i < bodies.size(); i++) {
+                    if (i > 0) {
+                        line.append(' ');
+                    }
+                    line.append('x').append(i).append('=')
+                            .append(f(bodies.get(i).centre().x() - startX[i]));
+                    line.append(" v").append(i).append('=')
+                            .append(f(bridged.get(i).measuredSpeed()));
+                }
+                log(line + " entities=" + countEntities() + " heap_mb=" + (usedHeap() >> 20));
             }
         }
 
         @Override
         void finish() {
-            if (rig == null || train == null || bridged == null) {
+            if (rig == null || train == null || bridged.size() != bodies.size()) {
                 fail("no train");
                 return;
             }
@@ -1485,16 +1803,28 @@ public final class SelfTest {
             contraptions = countContraptions();
             markerAlive = marker != null && marker.isAlive();
             heapEnd = usedHeap();
-            travelled = rig.centre().x() - startCentre;
-            trainTravelled = bridged.travelToDate();
-
-            if (rig.isRemoved()) {
-                fail("the body was removed during the run");
-                return;
+            drift = 0.0;
+            for (int i = 0; i < bodies.size(); i++) {
+                travelled[i] = bodies.get(i).centre().x() - startX[i];
+                carriageTravelled[i] = bridged.get(i).travelToDate();
+                drift = Math.max(drift, Math.abs(travelled[i] - carriageTravelled[i]));
             }
-            if (!TrainBridge.isBridged(train) || !bridged.isActive()) {
+
+            for (TestRig body : bodies) {
+                if (body.isRemoved()) {
+                    fail("a body was removed during the run");
+                    return;
+                }
+            }
+            if (!TrainBridge.isBridged(train)) {
                 fail("the bridge did not survive the run");
                 return;
+            }
+            for (BridgedCarriage carriage : bridged) {
+                if (!carriage.isActive()) {
+                    fail("a carriage was detached during the run");
+                    return;
+                }
             }
             if (contraptions != 0) {
                 fail(contraptions + " carriage contraption entities exist for a bridged train");
@@ -1513,13 +1843,13 @@ public final class SelfTest {
                         + " -> " + entitiesEnd);
                 return;
             }
-            if (Math.abs(travelled - trainTravelled) > 0.5) {
-                fail("the carriage drifted from the body over the run: body=" + f(travelled)
-                        + " carriage=" + f(trainTravelled));
+            if (drift > 0.5) {
+                fail("a carriage drifted from its body over the run: " + f(drift));
                 return;
             }
-            if (ticksHolding < 0.95 * ticks) {
-                fail("the axles held the rail for only " + ticksHolding + " of " + ticks + " ticks");
+            if (ticksHolding < 0.95 * ticks * bodies.size()) {
+                fail("the axles held the rail for only " + ticksHolding + " of "
+                        + ticks * bodies.size() + " axle-ticks");
                 return;
             }
             pass();
@@ -1537,7 +1867,7 @@ public final class SelfTest {
             if (rig == null) {
                 return;
             }
-            marker = new ItemEntity(level, startCentre, rig.railHeight() + 0.5, rig.centre().z(),
+            marker = new ItemEntity(level, startX[0], rig.railHeight() + 0.5, rig.centre().z(),
                     new ItemStack(Items.STICK));
             marker.setNoGravity(true);
             level.addFreshEntity(marker);
@@ -1569,9 +1899,14 @@ public final class SelfTest {
         @Override
         String metrics() {
             return "ticks=" + ticks
-                    + " travelled=" + f(travelled)
-                    + " carriage_travelled=" + f(trainTravelled)
-                    + " drift=" + f(travelled - trainTravelled)
+                    + " carriages=3 bodies=3"
+                    + " travelled_front=" + f(travelled[0])
+                    + " travelled_middle=" + f(travelled[1])
+                    + " travelled_rear=" + f(travelled[2])
+                    + " carriage_front=" + f(carriageTravelled[0])
+                    + " carriage_middle=" + f(carriageTravelled[1])
+                    + " carriage_rear=" + f(carriageTravelled[2])
+                    + " drift_max=" + f(drift)
                     + " entities_start=" + entitiesStart
                     + " entities_end=" + entitiesEnd
                     + " reference_entity_alive=" + markerAlive
@@ -1580,6 +1915,7 @@ public final class SelfTest {
                     + " heap_end_mb=" + (heapEnd >> 20)
                     + " lateral_max=" + f(lateralMax)
                     + " ticks_holding=" + ticksHolding
+                    + " axle_ticks=" + (ticks * bodies.size())
                     + " bridged=" + (train != null && TrainBridge.isBridged(train));
         }
 
@@ -1591,8 +1927,19 @@ public final class SelfTest {
                 train.invalid = true;
                 train = null;
             }
-            bridged = null;
-            super.cleanup();
+            bridged.clear();
+            for (TestRig body : new TestRig[]{rig, middle, rear}) {
+                if (body != null) {
+                    body.remove();
+                }
+            }
+            rig = null;
+            middle = null;
+            rear = null;
+            if (rail != null) {
+                rail.remove();
+                rail = null;
+            }
         }
     }
 

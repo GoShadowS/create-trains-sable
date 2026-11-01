@@ -1081,6 +1081,8 @@ public final class SelfTest {
         private double gapDrift;
         private double meanRelative = Double.NaN;
         private double instantRelative;
+        private double frontBiasMean = Double.NaN;
+        private double rearBiasMean = Double.NaN;
 
         private double frontMass;
         private double rearMass;
@@ -1092,6 +1094,14 @@ public final class SelfTest {
         private double relativeSum;
         private int relativeCount;
         private double relativeWorst;
+        private double frontBiasSum;
+        private double rearBiasSum;
+        private double frontBiasWorst;
+        private double rearBiasWorst;
+        private int biasCount;
+        private double gapAt20 = Double.NaN;
+        private double gapAt40 = Double.NaN;
+        private double gapAt80 = Double.NaN;
         private int ticksInContact = 1;
 
         CoupleScenario() {
@@ -1169,6 +1179,15 @@ public final class SelfTest {
             double frontX = rig.centre().x();
             double rearX = trailer.centre().x();
             double gapNow = Math.abs(frontX - rearX);
+            if (ticks == 20) {
+                gapAt20 = gapNow;
+            }
+            if (ticks == 40) {
+                gapAt40 = gapNow;
+            }
+            if (ticks == 80) {
+                gapAt80 = gapNow;
+            }
             if (ticks > END - SETTLE_TICKS) {
                 if (Double.isNaN(gapAtSettleStart)) {
                     gapAtSettleStart = gapNow;
@@ -1176,10 +1195,23 @@ public final class SelfTest {
                 gapMin = Math.min(gapMin, gapNow);
                 gapMax = Math.max(gapMax, gapNow);
                 if (!Double.isNaN(prevFrontX)) {
-                    double relative = ((rearX - prevRearX) - (frontX - prevFrontX)) / DT;
+                    double frontByPosition = (frontX - prevFrontX) / DT;
+                    double rearByPosition = (rearX - prevRearX) / DT;
+                    double relative = rearByPosition - frontByPosition;
                     relativeSum += relative;
                     relativeCount++;
                     relativeWorst = Math.max(relativeWorst, Math.abs(relative));
+
+                    // How far the handle's own velocity is from what the body actually did in the
+                    // tick. A body cannot move at one speed and displace at another; if these two
+                    // disagree, the velocity read is the one to distrust.
+                    double frontBias = rig.velocity().x() - frontByPosition;
+                    double rearBias = trailer.velocity().x() - rearByPosition;
+                    frontBiasSum += frontBias;
+                    rearBiasSum += rearBias;
+                    frontBiasWorst = Math.max(frontBiasWorst, Math.abs(frontBias));
+                    rearBiasWorst = Math.max(rearBiasWorst, Math.abs(rearBias));
+                    biasCount++;
                 }
             }
             prevFrontX = frontX;
@@ -1231,6 +1263,8 @@ public final class SelfTest {
             gapEnd = gap();
             gapDrift = gapEnd - gapAtSettleStart;
             meanRelative = relativeCount == 0 ? Double.NaN : relativeSum / relativeCount;
+            frontBiasMean = biasCount == 0 ? Double.NaN : frontBiasSum / biasCount;
+            rearBiasMean = biasCount == 0 ? Double.NaN : rearBiasSum / biasCount;
             frontSpeed = rig.velocity().x();
             rearSpeed = trailer.velocity().x();
             frontMoved = rig.centre().x() - startFront;
@@ -1298,11 +1332,16 @@ public final class SelfTest {
                     + " gap_end=" + f(gapEnd)
                     + " extension=" + f(extension)
                     + " peak_extension=" + f(peakExtension)
+                    + " gap_at_20=" + f(gapAt20) + " gap_at_40=" + f(gapAt40)
+                    + " gap_at_80=" + f(gapAt80)
                     + " gap_min=" + f(gapMin) + " gap_max=" + f(gapMax)
                     + " gap_drift=" + f(gapDrift)
                     + " rel_speed_mean=" + f(meanRelative)
                     + " rel_speed_instant=" + f(instantRelative)
                     + " rel_speed_worst=" + f(relativeWorst)
+                    + " front_v_bias=" + f(frontBiasMean) + " rear_v_bias=" + f(rearBiasMean)
+                    + " front_v_bias_worst=" + f(frontBiasWorst)
+                    + " rear_v_bias_worst=" + f(rearBiasWorst)
                     + " m_front=" + f(frontMass) + " m_rear=" + f(rearMass)
                     + " train_deformation=" + f(stressCreate)
                     + " v_front=" + f(frontSpeed)

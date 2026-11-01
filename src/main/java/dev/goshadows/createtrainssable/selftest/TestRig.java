@@ -219,6 +219,12 @@ final class TestRig {
     /** Places a real signal block beside the track and points it at the node. */
     static SignalBlockEntity placeSignal(ServerLevel level, BlockPos pos, BlockPos track,
                                          boolean red) {
+        return placeSignal(level, pos, track, red, true);
+    }
+
+    /** Places a real signal block, pointing at the track from one side or the other. */
+    static SignalBlockEntity placeSignal(ServerLevel level, BlockPos pos, BlockPos track,
+                                         boolean red, boolean positive) {
         BlockState state = AllBlocks.TRACK_SIGNAL.getDefaultState()
                 .setValue(SignalBlock.POWERED, red);
         level.setBlockAndUpdate(pos, state);
@@ -226,7 +232,7 @@ final class TestRig {
         if (!(blockEntity instanceof SignalBlockEntity signal)) {
             throw new IllegalStateException("no signal block entity at " + pos);
         }
-        aim(signal.edgePoint, pos, track, true);
+        aim(signal.edgePoint, pos, track, positive);
         return signal;
     }
 

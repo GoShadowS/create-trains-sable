@@ -107,6 +107,26 @@ public final class BridgedCarriage extends Carriage {
     }
 
     /**
+     * Answers Create's question "is there a driver aboard?" from the body's own blocks.
+     *
+     * <p>Create fills {@code presentConductors} from the carriage's contraption, and a bridged
+     * carriage has none, so without this every bridged train reports no driver and Create's own
+     * navigation refuses to drive it to a station. The rule Create applies inside a contraption is a
+     * block rule - a conductor block with a train controls block on one side - so it is applied here
+     * to the body instead, in {@link BodyConductors}.</p>
+     */
+    @Override
+    public void updateConductors() {
+        if (!isActive() || train == null) {
+            return;
+        }
+        net.createmod.catnip.data.Couple<Boolean> sides =
+                BodyConductors.of(body.body(), forward(train.graph));
+        presentConductors.setFirst(sides.getFirst());
+        presentConductors.setSecond(sides.getSecond());
+    }
+
+    /**
      * A bridged carriage never lets Create create a contraption entity for it.
      *
      * <p>Anchors are still updated inside {@code travel}; only the entity side is skipped. This is

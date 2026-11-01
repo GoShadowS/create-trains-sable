@@ -18,6 +18,7 @@ import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.rail.TruckBlockEntity;
 import dev.goshadows.createtrainssable.rail.Vec;
 import dev.goshadows.createtrainssable.rail.WheelRail;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -30,6 +31,7 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -89,6 +91,7 @@ public final class SelfTest {
                 new EntryScenario(),
                 new CoupleScenario(),
                 new ChainScenario(),
+                new ConductorsScenario(),
                 new SoakScenario());
 
         private int index = -1;
@@ -1436,6 +1439,121 @@ public final class SelfTest {
         }
     }
 
+
+    /**
+     * A bridged consist with a driver in it, and one without.
+     *
+     * <p>Create will not navigate a train whose carriages report no conductor, and a bridged carriage
+     * has no contraption to report one from - which is why a bridged train could be driven by hand but
+     * never run a schedule. The bridge answers that question from the blocks in the body, so this
+     * scenario builds a three-carriage consist where only the middle vehicle has a cab, and checks
+     * that exactly that carriage reports a forward driver and that nobody reports a backward one.</p>
+     */
+    private static final class ConductorsScenario extends Scenario {
+
+        private static final int END = 40;
+        private static final int REAR_X = 2000;
+        private static final int MIDDLE_X = 2010;
+        private static final int FRONT_X = 2020;
+        private static final int RAIL_FROM = 1960;
+        private static final int RAIL_TO = 2100;
+
+        private TestRig middle;
+        private TestRig rear;
+        private TestRig.Rail rail;
+        private Train train;
+        private final boolean[] perCarriageForward = new boolean[3];
+        private final boolean[] perCarriageBackward = new boolean[3];
+        private boolean forward;
+        private boolean backward;
+        private boolean checked;
+
+        ConductorsScenario() {
+            super("conductors", END, 2552);
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            this.level = level;
+            try {
+                rail = TestRig.rail(level, RAIL_FROM, RAIL_TO, 100, z + 1.5);
+                rear = TestRig.assembleOn(rail, REAR_X, z, false, false);
+                middle = TestRig.assembleOn(rail, MIDDLE_X, z, false, false, Direction.EAST);
+                rig = TestRig.assembleOn(rail, FRONT_X, z, true, false);
+                List<TestRig> bodies = List.of(rig, middle, rear);
+                train = trainOf(bodies, new int[]{FRONT_X, MIDDLE_X, REAR_X});
+                train.targetSpeed = 0.0;
+                TrainBridge.bridge(train, List.of(rig.body, middle.body, rear.body));
+            } catch (RuntimeException | LinkageError e) {
+                CreateTrainsSable.LOGGER.error("CTS SELFTEST scenario=conductors could not build", e);
+                fail("build: " + e);
+                finished = true;
+            }
+        }
+
+        @Override
+        void step() {
+            if (train == null) {
+                return;
+            }
+            train.manualTick = true;
+            train.targetSpeed = 0.0;
+            if (ticks < 5) {
+                return;
+            }
+            forward = train.hasForwardConductor();
+            backward = train.hasBackwardConductor();
+            for (int i = 0; i < train.carriages.size() && i < perCarriageForward.length; i++) {
+                Carriage carriage = train.carriages.get(i);
+                perCarriageForward[i] = carriage.presentConductors.getFirst();
+                perCarriageBackward[i] = carriage.presentConductors.getSecond();
+            }
+            checked = true;
+            log("forward=" + forward + " backward=" + backward
+                    + " per_carriage_forward=" + Arrays.toString(perCarriageForward)
+                    + " per_carriage_backward=" + Arrays.toString(perCarriageBackward));
+            pass();
+        }
+
+        @Override
+        void finish() {
+            if (!checked) {
+                fail("the train never reported a conductor either way");
+            }
+        }
+
+        @Override
+        String metrics() {
+            return "carriages=" + (train == null ? 0 : train.carriages.size())
+                    + " drivers_in_bodies=1"
+                    + " forward=" + forward + " backward=" + backward
+                    + " carriage_forward=" + Arrays.toString(perCarriageForward)
+                    + " carriage_backward=" + Arrays.toString(perCarriageBackward)
+                    + " ticks=" + ticks;
+        }
+
+        @Override
+        void cleanup() {
+            if (train != null) {
+                TrainBridge.detach(train);
+                Create.RAILWAYS.removeTrain(train.id);
+                train.invalid = true;
+                train = null;
+            }
+            for (TestRig body : new TestRig[]{rig, middle, rear}) {
+                if (body != null) {
+                    body.remove();
+                }
+            }
+            rig = null;
+            middle = null;
+            rear = null;
+            if (rail != null) {
+                rail.remove();
+                rail = null;
+            }
+        }
+    }
 
     /**
      * Three vehicles, two springs, one traction truck: the consist a claim about trains has to cover.

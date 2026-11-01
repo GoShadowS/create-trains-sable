@@ -1,6 +1,9 @@
 package dev.goshadows.createtrainssable.selftest;
 
+import com.simibubi.create.AllBlocks;
 import com.simibubi.create.Create;
+import com.simibubi.create.content.contraptions.actors.trainControls.ControlsBlock;
+import com.simibubi.create.content.processing.burner.BlazeBurnerBlock;
 import com.simibubi.create.content.trains.entity.TravellingPoint;
 import com.simibubi.create.content.trains.graph.TrackEdge;
 import com.simibubi.create.content.trains.graph.TrackGraph;
@@ -147,12 +150,27 @@ final class TestRig {
 
     /** Places a vehicle on an existing rail: driven or not, owning the rail or not. */
     static TestRig assembleOn(Rail rail, int x, int z, boolean driven, boolean ownsRail) {
+        return assembleOn(rail, x, z, driven, ownsRail, null);
+    }
+
+    /**
+     * Places a vehicle with a driver aboard.
+     *
+     * @param driverSide the direction the driver faces, in world axes, or {@code null} for a vehicle
+     *                   nobody can drive; a lit blaze burner and a train controls block are placed
+     *                   on the deck for it
+     */
+    static TestRig assembleOn(Rail rail, int x, int z, boolean driven, boolean ownsRail,
+                              Direction driverSide) {
         ServerLevel level = rail.level;
         for (int dx = 0; dx < 5; dx++) {
             for (int dz = 0; dz < 3; dz++) {
                 level.setBlockAndUpdate(new BlockPos(x + dx, (int) rail.y + 1, z + dz),
                         Blocks.SMOOTH_STONE.defaultBlockState());
             }
+        }
+        if (driverSide != null) {
+            placeDriver(level, new BlockPos(x + 2, (int) rail.y + 1, z + 1), driverSide);
         }
         List<BlockPos> truckPositions = new ArrayList<>(2);
         BlockPos firstTruck = new BlockPos(x + 1, (int) rail.y, z + 1);
@@ -192,6 +210,24 @@ final class TestRig {
         }
         return new TestRig(level, container, body, rail, trucks, gathered.blocks().size(), ownsRail,
                 truckPositions);
+    }
+
+    /**
+     * Puts a conductor and the controls block that faces it, the way a player builds a cab.
+     *
+     * <p>Create only counts a blaze burner as a conductor while it is lit, and only counts it as the
+     * driver of one end when a train controls block sits on that side and faces back at it, so both
+     * blocks are placed here rather than a marker entity.</p>
+     */
+    private static void placeDriver(ServerLevel level, BlockPos pos, Direction facing) {
+        BlockState burner = AllBlocks.BLAZE_BURNER.get()
+                .defaultBlockState()
+                .setValue(BlazeBurnerBlock.HEAT_LEVEL, BlazeBurnerBlock.HeatLevel.KINDLED);
+        level.setBlockAndUpdate(pos, burner);
+        BlockState controls = AllBlocks.TRAIN_CONTROLS.get()
+                .defaultBlockState()
+                .setValue(ControlsBlock.FACING, facing.getOpposite());
+        level.setBlockAndUpdate(pos.relative(facing), controls);
     }
 
     private static void placeTruck(ServerLevel level, BlockPos pos, TruckBlock block) {

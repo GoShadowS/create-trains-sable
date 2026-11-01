@@ -12,17 +12,18 @@ may not be removed, hidden or rewritten. See [Licence and attribution](#licence-
 
 ## Project status: ALPHA
 
-**Status: alpha, version `0.1.0-alpha`. The API, the physics, the data format and the save
+**Status: alpha, version `0.2.0-alpha`. The API, the physics, the data format and the save
 compatibility can all change without warning. Not ready for production servers.**
 
-The version number is frozen for the whole alpha period and does not move with individual updates; a
-build is identified by its commit, and the number changes only when a whole phase of the plan below
-is closed. `CHANGELOG.md` says what is in this alpha, `CONTRIBUTING.md` says when the mod is allowed
-to leave it.
+The version does not move with individual updates - a build is identified by its commit - and it
+changes only when a whole phase of the plan below is closed. `0.2.0-alpha` is the phase that made a
+consist work: several vehicles, one Create train, springs between them. `CHANGELOG.md` says what is in
+each phase, `CONTRIBUTING.md` says when the mod is allowed to leave alpha.
 
 What is still missing, in plain terms, because a version suffix should not be the only signal:
 
-- derailment is not reported to Create - a vehicle that leaves the rail simply stops being driven;
+- a vehicle that leaves the rail is not reported to Create: the train keeps its own idea of where it
+  is. (An overstretched coupling *is* reported - see "Known limitations".)
 - stations and signals do not stop a train that is bridged to a physical body;
 - passengers and cargo are disabled while a train is bridged;
 - collisions between two consists are not modelled;
@@ -30,9 +31,9 @@ What is still missing, in plain terms, because a version suffix should not be th
 
 **Physical rail vehicles for Create.** A vehicle is a Sable structure, and its axles are the only thing
 that holds it on the rails: real wheel/rail contact, adhesion-limited traction, curves that can throw
-it off, and spring couplings that hold two vehicles together with equal and opposite force. A Create
-train can be bridged to such a body, so the route stays Create's while the motion becomes the physics
-engine's.
+it off, and spring couplings that hold a consist of vehicles together with equal and opposite force. A
+Create train can be bridged to such a body, so the route stays Create's while the motion becomes the
+physics engine's.
 
 Minecraft 1.21.1 · NeoForge · Create 6.0.10 · Sable 2.0 · Java 21
 
@@ -98,6 +99,11 @@ one body and the opposite force to the other, at the coupling faces: a locomotiv
 back by the wagons it pulls. A coupling pulls and pushes along one line only - it transmits no torque
 and does not bend.
 
+A consist is a chain of them, and the chain works the way it looks: in a three-vehicle train the
+coupling to the leading vehicle carries the load of both vehicles behind it and stretches roughly
+twice as far as the one behind it, which is what you would see on a real train starting away from a
+signal.
+
 ## Putting a Create train on a physical body
 
 A body on its own has no route. Create's trains have the route - the track graph, the travelling
@@ -127,8 +133,8 @@ bridged.
 
 So **passengers and cargo are disabled functionality in this alpha**, not relocated functionality. A
 player who tries to board a bridged carriage has no carriage to board; a train inventory is not
-rendered and not accessible. Carrying riders into the physical body is phase C below, and until it
-exists a bridged train is a freight-only, empty-vehicle feature.
+rendered and not accessible. Carrying riders into the physical body is the next-but-one item of the
+roadmap below, and until it exists a bridged train is a freight-only, empty-vehicle feature.
 
 ### Bridging a train by hand
 
@@ -158,15 +164,18 @@ keeps the carriage object and only switches where its distance comes from.
 
 ## What comes next
 
-Not implemented; listed so the roadmap is not a guess. The version number moves when one of these
-phases is closed, not before.
+Not implemented; listed so the roadmap is not a guess. The version number moves when a whole phase of
+it is closed, not before.
 
-- **B - a whole consist.** Wiring a train to its bodies from inside the game, and `Train.stress`
-  treated as real deformation instead of a number to clamp.
-- **C - riders.** Passengers and cargo moved into the physical body, which is also when the bridged
+- **Stations and signals (next).** A bridged train cannot currently run a schedule, because Create's
+  navigation asks for a conductor and a bridged carriage has no contraption to carry one. The plan is
+  to answer that question from the vehicle itself - a train controls block inside the body - and then
+  measure a station stop and a red signal.
+- **Riders.** Passengers and cargo moved into the physical body, which is also when the bridged
   carriage stops being an empty shell.
-- **D - derailment in the train.** A body that leaves the rail puts the train into Create's own
-  derailed state, and stations and signals finally stop a bridged train.
+- **Derailment in the train.** A vehicle that leaves the rail puts the train into Create's own derailed
+  state, so the train screen agrees with what the player sees. (A coupling stretched past its limit
+  already does this; a rail departure does not yet.)
 
 ## Configuration
 
@@ -214,9 +223,9 @@ before they are visible in the world.
 
 Every push runs three things, and the build fails if any of them fails: the mod compiles and 18 unit
 tests of the rail contact and the coupling arithmetic pass; a dedicated server loads the mod and
-reaches `Done (`; and a physics session runs eight scenarios - assembly, guidance, traction,
-derailment, bridging, bridging on and off by hand, a pulled wagon, and a minute-long soak - and prints
-a line per scenario.
+reaches `Done (`; and a physics session runs nine scenarios - assembly, guidance, traction,
+derailment, bridging, bridging on and off by hand, a pulled wagon, a three-vehicle consist, and a
+minute of a three-vehicle consist - and prints a line per scenario.
 
 Those sessions are the project's own measurement, and their numbers belong to the pull request that
 changed the behaviour, not to this file: a README full of measurements from last month is worse than
@@ -241,15 +250,17 @@ in `LICENSE-ARR` (All Rights Reserved, so a redraw has to be yours).
 - **A bridge needs as many free bodies as the train has carriages.** The tool pairs them by distance
   and direction, not by identity, so a consist assembled in a different order will be paired wrongly
   and the springs will fight. There is no per-carriage selection yet.
-- **A pair that deforms by more than four blocks derails the train, by Create's own rule.** The spring
-  is capped at 14 m/s^2 so this is hard to reach, but a body wedged against a wall will do it.
+- **A coupling stretched by more than four blocks derails the train, by Create's own rule.** The
+  bridge reports the physical deformation to Create every tick, and past Create's limit it stops the
+  train and sets the derailed state the train screen shows. The spring is capped at 14 m/s^2 so this
+  is hard to reach, but a vehicle wedged against a wall will do it.
 - **A bridge is not covered for hours of play.** One minute of game time is measured; chunk unload,
-  reload, and deleting a train while it is bridged are not. Open until phase D.
+  reload, and deleting a train while it is bridged are not.
 - **No passengers, no cargo while bridged.** A bridged carriage has no contraption entity, so there is
   nothing to ride in and nothing to open. See "What a bridged carriage does not have" above.
-- **No station stops and no signal stops while bridged.** Create's navigation needs a conductor from
-  the contraption and a station to drive to; neither exists for a bridged carriage yet, so a bridged
-  train can be driven with its controls but cannot run a schedule to a station.
+- **No station stops and no signal stops while bridged.** Create's navigation refuses to drive a
+  train whose carriage has no conductor, and a bridged carriage has no contraption to carry one yet,
+  so a bridged train can be driven with its controls but cannot run a schedule to a station.
 - **One contact point per axle.** There is no wheel lift, no axle load transfer and no per-wheel slip
   curve; tight S-bends are where this shows first.
 - **Couplings do not transmit torque or bend.** They pull and push along one line, which is what a
@@ -265,7 +276,7 @@ in `LICENSE-ARR` (All Rights Reserved, so a redraw has to be yours).
 
 | Path | Licence |
 | --- | --- |
-| code: `src/main/java/`, `src/test/java/`, `build.gradle`, `tools/`, the documents in the repository root | **Apache License 2.0** ([LICENSE-APACHE](LICENSE-APACHE)) |
+| code: `src/main/java/`, `src/test/java/`, `src/main/resources/data/`, `build.gradle`, `tools/`, the documents in the repository root | **Apache License 2.0** ([LICENSE-APACHE](LICENSE-APACHE)) |
 | assets: `src/main/resources/assets/createtrainssable/` - textures, models, blockstates, language files - and `pack.mcmeta` | **All Rights Reserved** ([LICENSE-ARR](LICENSE-ARR)) |
 
 The Apache-2.0 side requires the `NOTICE` file to be preserved in every distribution (section 4(d))

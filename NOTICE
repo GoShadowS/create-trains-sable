@@ -9,6 +9,8 @@ This product is licensed under two licences, split by path.
 2. ASSETS - All Rights Reserved (see LICENSE-ARR): everything under
    src/main/resources/assets/createtrainssable/ and src/main/resources/pack.mcmeta.
 
+The datapack files under src/main/resources/data/ are part of the code licence, not assets.
+
 The assets are not covered by Apache-2.0 and may not be copied, modified or redistributed
 apart from this project without the author's written permission.
 

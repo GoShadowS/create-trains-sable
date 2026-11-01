@@ -2,6 +2,33 @@
 
 All notable changes to this project. Newest first.
 
+## `0.2.0-alpha` - a consist, not a pair
+
+The version moved because a phase closed, not because a jar was built. The alpha below was one body,
+then two; this one is a train of several vehicles that holds together and can be trusted with a load
+behind it.
+
+### What works now
+
+- **A chain of vehicles.** A Create train with three carriages bridged to three bodies runs as one
+  consist: one traction truck in front, two unpowered vehicles behind it, a spring between each pair.
+  Both couplings hold their gap while the train runs, and the leading one stretches about twice as far
+  as the one behind it - it is carrying both vehicles, and a coupling that ignored that would be a
+  rigid bar rather than a coupling.
+- **Create reacts when the couplings are pulled apart.** For a bridged train, Create had no way of
+  knowing how far a coupling was stretched, so nothing happened however hard the consist was pulled.
+  It now sees the real deformation and applies its own limit: a coupling stretched past four blocks
+  stops the train and puts it in the derailed state that the train screen shows.
+- **A minute of a consist, not of a single body.** The long-run check now runs a three-vehicle train
+  and watches every carriage against its body, the entity count and every axle's contact with the
+  rail.
+
+### Still open, and it is the next phase
+
+Stations and signals: Create's navigation needs a conductor, and a bridged carriage still has no
+contraption to carry one. Then riders, then derailment reported to Create when a vehicle leaves the
+rail - see the roadmap in `README.md`.
+
 ## `0.1.0-alpha` - the alpha
 
 This is the whole alpha up to now, in one entry. The number is frozen: it moves when a phase of the
@@ -43,7 +70,7 @@ read as steady progress the project had not made. They are kept here as history,
   force at the axle rather than at the centre of mass.
 - Adhesion-limited traction and braking, shared between axles by the weight each carries.
 - Derailment as a physical event: an axle beyond the flange limits or a curve taken too fast stops
-  guiding, and the vehicle keeps its momentum. Create is not told about it yet.
+  guiding, and the vehicle keeps its momentum. In this version Create is not told about it.
 - Spring couplings between vehicles, with equal and opposite force at the coupling faces.
 
 **Create integration**
@@ -60,8 +87,9 @@ read as steady progress the project had not made. They are kept here as history,
 Stated here as well as in `README.md`, because a changelog that omits it would be the wrong kind of
 short:
 
-- no passengers and no cargo while a train is bridged (phase C);
-- no derailed state in Create, no station stops and no signal stops while bridged (phase D);
+- no passengers and no cargo while a train is bridged;
+- no derailed state in Create for a vehicle that leaves the rail, and no station stops and no signal
+  stops while bridged;
 - no collisions between two consists;
 - no support for long sessions with chunk unloading.
 

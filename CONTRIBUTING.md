@@ -22,18 +22,20 @@ quietly dropped.
 
 ## Version numbering: frozen for the alpha
 
-The version is **`0.1.0-alpha`** and it does not change from pull request to pull request. Builds are
+The version is **`0.2.0-alpha`** and it does not change from pull request to pull request. Builds are
 told apart by their commit.
 
 - **A release number is assigned only when a whole phase is closed** - the phases are listed in
-  `README.md` under "What comes next" - or when the project leaves alpha. Closing phase B gives
-  `0.2.0-alpha`, phase C `0.3.0-alpha`, phase D `0.4.0-alpha`.
+  `README.md` under "What comes next" - or when the project leaves alpha. `0.1.0-alpha` was one body;
+  `0.2.0-alpha` is a consist of several vehicles. The next number is assigned when stations and
+  signals close, then when riders close, then when derailment reported to Create closes.
 - **Inside a phase, nothing increments.** Not for a feature, not for a fix, not for a patch. If it
   helps a player to know what is in their jar, the answer is the changelog and the commit, not a new
   number.
 - **A version without a pre-release suffix may not be assigned** until all of these are closed, each
   with a measurement in the PR that closes it:
-  1. derailment reported to Create's own derailed state;
+  1. a vehicle leaving the rail reported to Create's own derailed state (an overstretched coupling is
+   already reported);
   2. stations stopping a bridged train, with the stop distance measured;
   3. signals stopping a bridged train, with the reaction time measured;
   4. the train visible and driven from Create's own interface;
@@ -45,8 +47,9 @@ told apart by their commit.
 
 - `./gradlew build` - compile and run the 18 unit tests of the rail contact and the coupling
   arithmetic.
-- `./gradlew runSelfTest` - a dedicated server with `-Dcts.selftest=true`: it builds a vehicle by code,
-  drives it, bridges it to a Create train and prints one line of numbers per scenario.
+- `./gradlew runSelfTest` - a dedicated server with `-Dcts.selftest=true`: it builds vehicles by code,
+  drives them, bridges a Create train to up to three of them and prints one line of numbers per
+  scenario.
 - `./gradlew runServer` - a dedicated server, which must reach `Done (`.
 - `python3 tools/preview_models.py` - renders the block models with the real textures into PNGs, so a
   stretched face is visible without launching the game.

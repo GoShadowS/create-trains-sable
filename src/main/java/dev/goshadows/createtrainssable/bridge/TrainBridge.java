@@ -254,11 +254,58 @@ public final class TrainBridge {
                 bridge.reports[i] = couple(bridge.bodies.get(i), bridge.bodies.get(i + 1),
                         bridge.restLengths[i], settings, timeStep);
             }
+            publishDeformation(bridge);
         }
         for (Train train : broken) {
             CreateTrainsSable.LOGGER.warn("Train {} lost a body; unbinding it", train.id);
             detach(train);
         }
+    }
+
+    /**
+     * Hands the springs' deformation to Create, and applies Create's own derail rule to it.
+     *
+     * <p>Writing is the honest direction, not reading. Create computes the array from contraption
+     * anchors; a bridged carriage has none, so for a bridged train the array stays at the fallback
+     * value and {@code Train.tick}'s {@code maxStress > 4} branch can never fire - a consist pulled
+     * apart by its couplings would keep being driven. Publishing alone is not enough either: that
+     * branch tests a local variable, not the array, so when the physical deformation passes Create's
+     * limit the bridge does exactly what Create does there - stops the train, sets {@code derailed}
+     * and asks for Create's own {@code highStress()} status.</p>
+     */
+    private static void publishDeformation(Bridge bridge) {
+        double[] deformation = new double[bridge.reports.length];
+        double worst = 0.0;
+        for (int i = 0; i < bridge.reports.length; i++) {
+            TrainCouplings.Report report = bridge.reports[i];
+            if (report == null) {
+                // A gap whose bodies had no handle this tick: publish nothing rather than a half
+                // array, so Create never reads a zero that means "no measurement".
+                return;
+            }
+            // Create counts a positive stress as "these two should move apart"; the spring counts a
+            // positive extension as "they are too far apart". Same quantity, opposite sign.
+            deformation[i] = -report.extension();
+            worst = Math.max(worst, Math.abs(deformation[i]));
+        }
+        TrainStress.write(bridge.train, deformation);
+        if (!bridge.train.derailed && worst > TrainStress.LIMIT) {
+            derailLikeCreate(bridge.train, worst);
+        }
+    }
+
+    private static void derailLikeCreate(Train train, double deformation) {
+        train.speed = 0.0;
+        if (train.navigation != null) {
+            train.navigation.cancelNavigation();
+        }
+        train.derailed = true;
+        if (train.status != null) {
+            train.status.highStress();
+        }
+        CreateTrainsSable.LOGGER.warn("Train {} derailed: its couplings are deformed by {} blocks, "
+                        + "past Create's limit of {}", train.id,
+                String.format(java.util.Locale.ROOT, "%.3f", deformation), TrainStress.LIMIT);
     }
 
     /** One spring of one gap: measure, then push both bodies by equal and opposite impulses. */

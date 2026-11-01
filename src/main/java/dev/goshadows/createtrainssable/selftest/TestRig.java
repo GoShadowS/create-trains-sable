@@ -300,6 +300,21 @@ final class TestRig {
         return new Vec(raw.x(), raw.y(), raw.z());
     }
 
+    /**
+     * Speed of the body as Sable derives it from its own pose updates, in m/s.
+     *
+     * <p>This is a second, independent answer to "how fast is this body": {@code latestLinearVelocity}
+     * is computed from the difference between the pose the pipeline reported at the end of the last
+     * substep and the pose at the start of the tick, so it is an average over integrated positions,
+     * not a solver state read in the middle of the step. Comparing it with
+     * {@link RigidBodyHandle#getLinearVelocity} is how the harness tells a real speed from a sampling
+     * artefact.</p>
+     */
+    Vec poseVelocity() {
+        Vector3dc raw = body.latestLinearVelocity;
+        return new Vec(raw.x(), raw.y(), raw.z());
+    }
+
     /** Applies a world-space impulse at the body's centre of mass. */
     void push(Vec worldImpulse) {
         RigidBodyHandle handle = handle();

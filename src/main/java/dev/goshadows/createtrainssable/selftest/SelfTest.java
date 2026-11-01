@@ -18,7 +18,6 @@ import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.rail.TruckBlockEntity;
 import dev.goshadows.createtrainssable.rail.Vec;
 import dev.goshadows.createtrainssable.rail.WheelRail;
-import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -1083,6 +1082,14 @@ public final class SelfTest {
         private double instantRelative;
         private double frontBiasMean = Double.NaN;
         private double rearBiasMean = Double.NaN;
+        private double frontPoseMean = Double.NaN;
+        private double rearPoseMean = Double.NaN;
+        private double frontSolverMean = Double.NaN;
+        private double rearSolverMean = Double.NaN;
+        private double frontPoseSum;
+        private double rearPoseSum;
+        private double frontSolverSum;
+        private double rearSolverSum;
 
         private double frontMass;
         private double rearMass;
@@ -1205,6 +1212,10 @@ public final class SelfTest {
                     // How far the handle's own velocity is from what the body actually did in the
                     // tick. A body cannot move at one speed and displace at another; if these two
                     // disagree, the velocity read is the one to distrust.
+                    frontPoseSum += rig.poseVelocity().x();
+                    rearPoseSum += trailer.poseVelocity().x();
+                    frontSolverSum += rig.velocity().x();
+                    rearSolverSum += trailer.velocity().x();
                     double frontBias = rig.velocity().x() - frontByPosition;
                     double rearBias = trailer.velocity().x() - rearByPosition;
                     frontBiasSum += frontBias;
@@ -1265,6 +1276,10 @@ public final class SelfTest {
             meanRelative = relativeCount == 0 ? Double.NaN : relativeSum / relativeCount;
             frontBiasMean = biasCount == 0 ? Double.NaN : frontBiasSum / biasCount;
             rearBiasMean = biasCount == 0 ? Double.NaN : rearBiasSum / biasCount;
+            frontPoseMean = biasCount == 0 ? Double.NaN : frontPoseSum / biasCount;
+            rearPoseMean = biasCount == 0 ? Double.NaN : rearPoseSum / biasCount;
+            frontSolverMean = biasCount == 0 ? Double.NaN : frontSolverSum / biasCount;
+            rearSolverMean = biasCount == 0 ? Double.NaN : rearSolverSum / biasCount;
             frontSpeed = rig.velocity().x();
             rearSpeed = trailer.velocity().x();
             frontMoved = rig.centre().x() - startFront;
@@ -1340,6 +1355,8 @@ public final class SelfTest {
                     + " rel_speed_instant=" + f(instantRelative)
                     + " rel_speed_worst=" + f(relativeWorst)
                     + " front_v_bias=" + f(frontBiasMean) + " rear_v_bias=" + f(rearBiasMean)
+                    + " v_solver_front=" + f(frontSolverMean) + " v_pose_front=" + f(frontPoseMean)
+                    + " v_solver_rear=" + f(rearSolverMean) + " v_pose_rear=" + f(rearPoseMean)
                     + " front_v_bias_worst=" + f(frontBiasWorst)
                     + " rear_v_bias_worst=" + f(rearBiasWorst)
                     + " m_front=" + f(frontMass) + " m_rear=" + f(rearMass)
@@ -1548,14 +1565,4 @@ public final class SelfTest {
         }
     }
 
-    /** Kept so a future scenario can list what it built without a cast. */
-    static List<String> truckNames(ServerSubLevel body) {
-        List<String> names = new ArrayList<>();
-        for (var actor : body.getPlot().getBlockEntityActors()) {
-            if (actor instanceof TruckBlockEntity truck) {
-                names.add(truck.isDriven() ? "traction" : "rolling");
-            }
-        }
-        return names;
-    }
 }

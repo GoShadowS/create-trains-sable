@@ -60,16 +60,8 @@ public final class TrainBridge {
             this.reports = new TrainCouplings.Report[restLengths.length];
         }
 
-        public Train train() {
-            return train;
-        }
-
         public List<BridgedCarriage> carriages() {
             return Collections.unmodifiableList(carriages);
-        }
-
-        public List<ServerSubLevel> bodies() {
-            return Collections.unmodifiableList(bodies);
         }
 
         /** Gaps the train was coupled at, one per pair of neighbouring carriages. */
@@ -230,11 +222,6 @@ public final class TrainBridge {
         return null;
     }
 
-    /** How many trains are currently bridged; used by the harness and by diagnostics. */
-    public static int count() {
-        return BRIDGED.size();
-    }
-
     /**
      * One tick of every spring.
      *
@@ -286,8 +273,8 @@ public final class TrainBridge {
         }
         Vec frontCentre = centre(front);
         Vec backCentre = centre(back);
-        Vec frontVelocity = velocity(frontHandle);
-        Vec backVelocity = velocity(backHandle);
+        Vec frontVelocity = poseVelocity(front);
+        Vec backVelocity = poseVelocity(back);
         TrainCouplings.Report report = TrainCouplings.report(frontCentre, backCentre, restLength,
                 frontVelocity, backVelocity, settings);
 
@@ -326,8 +313,18 @@ public final class TrainBridge {
         return new Vec(world.x(), world.y(), world.z());
     }
 
-    private static Vec velocity(RigidBodyHandle handle) {
-        Vector3dc raw = handle.getLinearVelocity(new Vector3d());
+    /**
+     * The body's speed as derived from its own integrated positions, in m/s.
+     *
+     * <p>Sable writes this into {@code latestLinearVelocity} at the end of every physics substep from
+     * the pose the pipeline reported; the harness measured it matching the body's displacement to the
+     * third decimal, while {@code RigidBodyHandle.getLinearVelocity} - a solver state read before the
+     * substep is integrated - was off by 0.045 m/s on one body and 0.005 on the other in the same run.
+     * The damping term of the coupling is a relative speed, so a per-body bias of a few centimetres
+     * per second adds up; the pose-derived value has no such bias.</p>
+     */
+    private static Vec poseVelocity(ServerSubLevel body) {
+        Vector3dc raw = body.latestLinearVelocity;
         return new Vec(raw.x(), raw.y(), raw.z());
     }
 

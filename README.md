@@ -1,5 +1,28 @@
 # Create Trains Sable
 
+## Original project
+
+**Author and original repository: GoShadowS - https://github.com/GoShadowS/create-trains-sable**
+
+Copyright 2026 GoShadowS. Licensed under the Apache License, Version 2.0 (`LICENSE`). The `NOTICE`
+file must travel with every copy, fork and build. If you fork this mod, keep this section, the
+`NOTICE` file and the copyright line: attribution to the original author is a licence condition
+under Apache-2.0 section 4(d), not a courtesy, and it may not be removed, hidden or rewritten.
+See [Licence and attribution](#licence-and-attribution) for the full terms and for the licences of
+the projects this one builds on.
+
+## Project status: ALPHA
+
+**Status: alpha (`0.4.2-alpha.1`). The API, the physics, the data format and the save compatibility
+can all change without warning. Not ready for production servers.**
+
+What is still missing, in plain terms, because the version number alone should not be the only
+signal: derailment is not yet reported through Create's own `Train.derailed` / `TrainStatus`;
+stations and signals do not stop a bridged train; passengers and cargo are disabled while a train is
+bridged; collisions between two consists are not modelled; and nothing beyond one minute of running
+has been measured for long-session stability. `CHANGELOG.md` records this reading of the version
+number and the rule for leaving alpha (`CONTRIBUTING.md`).
+
 **Physical rail vehicles for Create.** A vehicle is a Sable structure, and its axles are the only
 thing that holds it on the rails: real wheel/rail contact, adhesion-limited traction, curves that
 can throw it off, and spring couplings that hold two vehicles together with equal and opposite
@@ -329,6 +352,57 @@ whose bodies are laid out very differently from the train's spacing gets a warni
 time (`the bodies are ... apart but the train's spacing is ...`), because then Create's stress and the
 spring's force are describing different geometry.
 
+### Two speeds, and which one to trust
+
+Write down every place the code asks "how fast is this body" and there are two different answers
+available, which is exactly how a diagnostic turns into a phantom defect:
+
+- **the solver's state**, `RigidBodyHandle.getLinearVelocity(Vector3d)` →
+  `PhysicsPipeline.getLinearVelocity` → Rapier's `linvel`, read inside `sable$physicsTick`;
+- **the pose's derivative**, `ServerSubLevel.latestLinearVelocity`, which Sable writes in
+  `SubLevelPhysicsSystem.updatePose` at the end of every substep from the difference between the pose
+  the pipeline reported and the pose at the start of the tick.
+
+They are sampled at different moments, and one of them is measured the way a physicist would: Sable
+calls `sable$physicsTick` for every actor *before* `pipeline.physicsTick(substepTimeStep)`, so a read
+there is the body's state at the boundary between two substeps - before that substep's impulses,
+including the truck's own traction and flange forces, have been resolved - while the pose derivative
+is computed from positions that were actually integrated. The `couple` scenario reports both for the
+same two bodies in the same run:
+
+```
+v_solver_front=0.837  v_pose_front=0.879   (bias -0.042)
+v_solver_rear =0.882  v_pose_rear =0.879   (bias +0.003)
+```
+
+The pose-derived speed is 0.879 m/s for both bodies, which is what a locked pair must be, and it is
+the only one of the three numbers that agrees with the distance the bodies cover: in the last
+twenty-tick window the front body advanced 25.102 - 24.223 = 0.879 blocks per 20 ticks, the rear
+24.844 - 23.966 = 0.878. The solver readings differ from it by a per-body constant: -0.042 on the
+driven body, +0.003 on the passive one. That is the whole explanation of `v_front` versus `v_rear` in
+the log, and it is not relative motion: the gap between the bodies drifts 0.000 blocks over the run.
+
+Why the solver read carries a per-body bias is an inference, not a measurement: an impulse applied
+once per tick is resolved in substep 1, so a read at the tick boundary sees a body that has not been
+pushed yet by exactly the amount it is about to be pushed, and how large that amount is depends on
+that body's own force budget - the driven body and the pulled body do not spend it the same way. The
+measurement establishes the bias and its sign; the mechanism is the explanation that fits it.
+
+Where each source is used, and what happens to the bias:
+
+| Site | Reads | Why that source | Bias inherited |
+| --- | --- | --- | --- |
+| `CarriageBody.advance` (the bridge itself) | positions | the distance a carriage travels must be what happened, not what a solver predicted | none - this is the one that matters |
+| `CarriageBody.measuredSpeed` | solver | diagnostics and harness only | yes, reported as such in this README |
+| `TrainBridge.couple` (damping) | pose, since `0.4.2-alpha.1` (was solver) | a relative speed: a per-body bias of -0.042 and +0.003 cancels in the *sum* only by accident, and here it did not, leaving a 0.045 m/s phantom closing speed and a damping force behind it | removed; side effect is 1.7 cm more steady extension, see the changelog entry |
+| `TruckBlockEntity.sable$physicsTick` | solver | a control loop inside the substep wants the current state, not a tick average | yes, and it is bounded: a 0.045 m/s bias in the along-speed enters the demand as `4.0 * 0.045 = 0.18 m/s^2` against a 1.2 m/s^2 traction cap |
+| `SpringCouplingBlockEntity` (the block-based coupling) | solver | same in-substep control argument | yes, same bound; it is the older path and bridged trains do not use it |
+| phase C (riders, `pushEntityLocal`) | not yet written | - | must use positions or `latestLinearVelocity`; a rider carried at a solver-read speed would jitter by that same 0.045 m/s |
+
+The rule this leaves behind: **anything that decides where a body goes reads positions; anything that
+damps or pushes inside a substep may read the solver, and must accept a few centimetres per second of
+bias.**
+
 ### What a bridged train costs over time
 
 The `soak` scenario runs a bridged train for 1200 ticks - one minute of game time - and watches the
@@ -379,6 +453,53 @@ brake distances, how tight a curve can be taken, whether the trucks sit where th
 is untuned, and every number in the configuration section is an estimate from physics, not a
 measurement from play.
 
+## Textures and models: what exists, and what "final" would take
+
+Every block in the mod has a texture, and none of them is a missing-texture placeholder. None of them
+is final art either, and they are not presented as such: they are 16x16, generated by
+`tools/make_textures.py` from a palette and a small amount of hand-placed detail, honest enough to
+play with and not good enough to ship as finished.
+
+| Block / item | Texture files | State |
+| --- | --- | --- |
+| Traction Truck (`traction_truck`) | `textures/block/truck_frame.png`, `truck_wheel.png`, `truck_drive.png` | unique first-pass pixel art: readable at a glance, flat shading, no AO or colour variation |
+| Rolling Truck (`rolling_truck`) | `textures/block/truck_frame.png`, `truck_wheel.png` | same; shares the frame and wheel textures with the driven truck on purpose |
+| Spring Coupling (`spring_coupling`) | `textures/block/coupling_plate.png`, `coupling_coil.png` | same; the coil is a four-turn spiral, the plate has bolt heads at the corners |
+| Assembly Tool (`assembly_tool`) | `textures/item/assembly_tool.png` | same; a tool silhouette, not an illustration |
+
+The models give every face a UV window sized from its own box (`tools/make_models.py`), so nothing is
+stretched by construction; `tools/preview_models.py` renders the three models with the real textures
+into PNGs, so a stretched face or a box inside another box is visible without launching the game.
+
+### Drawing final textures in Blockbench, step by step
+
+1. **Open the existing model.** Blockbench → *File → Open Model* →
+   `src/main/resources/assets/createtrainssable/models/block/traction_truck.json`.
+2. **Resolution.** Keep 16x16, Minecraft's native density. A 32x32 pass is a separate resource pack
+   for 1.21.1 and must not replace the base set.
+3. **UV.** Leave *Auto UV* off and keep the explicit rectangles: a 16x6 px side face keeps a 16x6
+   window. Changing them stretches the face - that is the only way to break the model.
+4. **Palette.** Five ramps: dark steel `#2E3236`, mid steel `#53595F`, light steel `#7C848B`,
+   highlight `#A9B1B7`, and one accent for the drive `#C08A3E`. At most 12 colours per texture.
+5. **Shading.** Light from top-left, one ramp step per surface, a one-pixel dark line where two boxes
+   meet. No gradients and no anti-aliasing - Minecraft's filtering blurs both.
+6. **Export.** *Export Block/Item Model* over the JSON in `models/block/`, *Export Texture* over the
+   PNG in `textures/block/` or `textures/item/`. Exact paths under
+   `src/main/resources/assets/createtrainssable/`:
+   ```
+   textures/block/truck_frame.png      textures/block/truck_wheel.png
+   textures/block/truck_drive.png      textures/block/coupling_plate.png
+   textures/block/coupling_coil.png    textures/item/assembly_tool.png
+   models/block/traction_truck.json    models/block/rolling_truck.json
+   models/block/spring_coupling.json   models/item/{assembly_tool,traction_truck,
+                                                rolling_truck,spring_coupling}.json
+   blockstates/{traction_truck,rolling_truck,spring_coupling}.json
+   ```
+7. **Verify headless.** `python3 tools/preview_models.py` renders the models with the new textures;
+   if a face looks wrong there, it is wrong in game.
+8. **Licence check.** The texture must be drawn by the contributor. Create's assets are All Rights
+   Reserved, so copying, tracing or recolouring a Create texture is rejected in review.
+
 ## Known limitations
 
 - **Assembly takes the whole connected structure.** The assembly tool gathers everything touching
@@ -410,21 +531,57 @@ measurement from play.
   slip curve; tight S-bends are where this shows first.
 - **Couplings do not transmit torque or bend.** They pull and push along one line, which is what a
   screw coupling does, and nothing more.
-- **The art is a first pass.** The textures are drawn in 16x16 by `tools/make_textures.py` and the
-  models by `tools/make_models.py`; every face gets a UV window sized from its own box, and
-  `tools/preview_models.py` renders the three models with the real textures so a stretched face or
-  a box inside another box is visible without launching the game. They are readable and consistent,
-  not final art.
+- **The art is a first pass, and is labelled as one.** Every block and item has its own texture, none
+  is a placeholder standing in for missing art, and none is presented as final - see "Textures and
+  models: what exists, and what final would take" above for the per-block state and the Blockbench
+  procedure for replacing them.
 - **A vehicle cannot be turned back into blocks.** Sable exposes assembly and removal but no
   disassembly, so an assembled vehicle is edited inside its sub-level or removed with Sable's own
   command. Writing a disassembler means writing blocks back into the world on top of terrain that
   may now be occupied, and that is not something to ship without playing it first.
 - **Sable's API is not semver-stable.** A Sable update can require an update here.
 
-## License
+## Licence and attribution
 
-MIT. See [LICENSE](LICENSE). Create and Sable are separate projects under their own licenses and
-are not included in this mod.
+This project is licensed under the **Apache License, Version 2.0**. The full text is in
+[LICENSE](LICENSE); the required notices are in [NOTICE](NOTICE).
+
+### Why Apache-2.0 and not something else
+
+| Option | Attribution of the original author | Obligations it puts on forks |
+| --- | --- | --- |
+| MIT (what 0.2.x-0.4.x used) | a copyright line that forks must "include" - enforceable, but silent about a NOTICE file and about marking modified files | almost none; the line is easy to drop without noticing |
+| **Apache-2.0 (chosen)** | section 4(d) requires the NOTICE file to be kept in any distribution, section 4(b) requires modified files to say they were modified, section 4(c) forbids reusing the project's name without permission | keep NOTICE and mark changes; patent grant included |
+| MPL-2.0 | attribution at file level: every modified file stays MPL and must be published | per-file copyleft; heavier for a mod that mixes files with Create's MIT code |
+| GPL-3.0 / AGPL-3.0 | copyleft is not attribution - a fork may keep the copyright line and still be a different product | whole-work copyleft; AGPL adds a network-use clause that clashes with shipping a mod that links a PolyForm-licensed dependency |
+
+Apache-2.0 was chosen because the requirement here is **non-removable attribution to GoShadowS**,
+not copyleft. It states that requirement in binding text (4(d) plus this repository's NOTICE), it
+allows the mod to be shipped alongside MIT and PolyForm code, and it does not force a fork to
+publish anything. MIT alone was rejected because "include the copyright notice" has no file that
+must survive repackaging; MPL-2.0 and the GPLs were rejected because they answer a different
+question (who must publish source) than the one that was asked (who must be named).
+
+### Compatibility
+
+- **Create - MIT for code, All Rights Reserved for assets.** Compatible: Apache-2.0 code may be
+  combined with MIT code, and MIT's notice is preserved for the parts that come from Create. No
+  Create asset is copied here: every texture in this repository is generated by
+  `tools/make_textures.py` and `tools/make_item_textures.py`. Create is a dependency, not a
+  component.
+- **Sable - PolyForm Shield License 1.0.0.** Compatible as a dependency: nothing from Sable is
+  redistributed in this repository or in the built jar, and PolyForm Shield's non-compete clause
+  concerns providing a competing product, which a physics add-on is not. Because that licence is
+  not permissive, Sable can never be vendored into this mod, and its notices must be visible where
+  Sable is described as a requirement (see `NOTICE`).
+- **Apache-2.0 and the rest of the mod ecosystem.** Apache-2.0 is one-way compatible with MIT: MIT
+  code can go into an Apache-2.0 work with attribution, which is exactly what happens here for
+  Create's MIT portions in a compiled mod environment.
+
+### Forks
+
+Change the name if you like. Keep `NOTICE`, keep this section, keep the copyright line. Removing
+them is a licence violation, not a style choice.
 
 ## Credits
 

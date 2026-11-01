@@ -59,10 +59,6 @@ public final class WheelRail {
     private WheelRail() {
     }
 
-    public static Output idle(State state) {
-        return new Output(Vec.ZERO, state, 0.0, 0.0, 0.0);
-    }
-
     /**
      * @param track        the rail under the axle, or {@code null} when there is none
      * @param axle         world position of the axle

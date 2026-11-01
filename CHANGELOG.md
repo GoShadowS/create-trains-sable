@@ -1,6 +1,105 @@
 # Changelog
 
-## 0.4.1 - the coupling settles, and a bridged train costs nothing that grows
+## 0.4.2-alpha.1 - the version number now says "alpha", the licence now requires a name
+
+### Version numbering was wrong, and is corrected retroactively
+
+Every release before this one was numbered without a pre-release suffix: `0.2.0`, `0.2.1`, `0.2.2`,
+`0.3.0`, `0.3.1`, `0.4.0`, `0.4.1`. That was a **numbering error, not a claim about the state of the
+project**: none of them was a release. The station and signal criteria are still open, derailment is
+not reported through Create's `Train.derailed`, passengers and cargo are disabled while bridged,
+collisions between consists are not modelled, and no run longer than one minute of game time has been
+measured. A number that climbs `0.2.1 -> 0.3.0 -> 0.4.0` reads as steady progress towards a stable
+release, and that reading was false.
+
+The old headings keep their text and gain their true numbers, so history stays traceable rather than
+retouched:
+
+| Published as | Actually was |
+| --- | --- |
+| `0.2.0` | `0.2.0-alpha.1` |
+| `0.2.1` | `0.2.1-alpha.1` |
+| `0.2.2` | `0.2.2-alpha.1` |
+| `0.3.0` | `0.3.0-alpha.1` |
+| `0.3.1` | `0.3.1-alpha.1` |
+| `0.4.0` | `0.4.0-alpha.1` |
+| `0.4.1` | `0.4.1-alpha.1` |
+
+Scheme from here on: `0.<minor>.<patch>-alpha.<n>`. The minor number moves only when a phase of the
+agreed architecture closes its acceptance criteria; the patch number moves for everything else; the
+suffix is mandatory. `1.0.0`-class numbering - anything without `-alpha`, `-beta` or `-rc` - is
+forbidden until every acceptance criterion in `CONTRIBUTING.md` is implemented and measured. This
+release therefore keeps minor 4 and moves the patch: it closes no phase.
+
+### Licence: MIT replaced by Apache-2.0 with a mandatory NOTICE
+
+MIT named the author but gave forks nothing that had to survive repackaging. Apache-2.0 section 4(d)
+requires the `NOTICE` file to be preserved in every distribution and 4(b) requires modified files to
+say they were modified; that is the "attribution of GoShadowS is non-removable" requirement in
+binding text. MPL-2.0 (file-level attribution plus per-file copyleft) and GPL/AGPL (copyleft answers
+a different question, and AGPL's network clause clashes with shipping a PolyForm-licensed dependency)
+were considered and rejected. Compatibility checked against the actual licences of the dependencies:
+Create's code is MIT and its assets are All Rights Reserved - nothing from Create's assets is copied
+here, every texture is generated in this repository; Sable is PolyForm Shield 1.0.0 - it is a
+dependency only, never vendored. Details in `README.md` under "Licence and attribution" and in
+`NOTICE`.
+
+### Added
+
+- `NOTICE` with the original author, the repository, the attribution terms and the third-party
+  notices.
+- `CONTRIBUTING.md` with the versioning rule, the list of criteria that must close before a
+  suffix-free version may exist, and the attribution rule for forks.
+- A project-status block at the top of `README.md` and an "Original project" section above it.
+- `LICENSE` is now the Apache License 2.0 with the copyright line in its appendix; `CITATION.cff`
+  updated to the new licence and version; `neoforge.mods.toml` declares `license = "Apache-2.0"` and
+  points at the NOTICE.
+
+### Removed
+
+Dead code that no longer had a caller after the bridge and the soak scenario: `WheelRail.idle`,
+`Vec.negate`, `Vec.toMinecraft`, `Vec.isFinite`, `TruckBlockEntity.lastLateralError`,
+`TrainBridge.count`, `Bridge.train()`, `Bridge.bodies()`, `CarriageBody.lastAdvance()`,
+`CarriageBody.lastCommand()`, `CarriageBody.lastMeasuredSpeed()`, `BridgedCarriage.lastMoved()`,
+`SelfTest.truckNames` with its now-unused `ServerSubLevel` import, and the committed
+`tools/__pycache__/` directory (now ignored). The unused `lastAdvance`, `lastCommand` and
+`lastMeasuredSpeed` fields went with their getters.
+
+### Changed
+
+- The damping term in `TrainBridge.couple` reads each body's speed from the pose Sable integrated
+  (`ServerSubLevel.latestLinearVelocity`) instead of the solver state
+  (`RigidBodyHandle.getLinearVelocity`). A locked pair must have the same speed; measured in one run,
+  the solver disagreed with itself by 0.045 m/s between the two bodies while the pose derivative gave
+  both 0.879 m/s, which is the speed the bodies actually covered (0.879 blocks per 20 ticks). A
+  spurious relative speed entered through the damper; that input is now gone.
+- Side effect of removing it, reported rather than absorbed: the steady-state coupling extension in
+  `couple` grew from 0.240 to 0.257 blocks (peak 0.246 -> 0.257), because the phantom damping force had
+  also been helping damp the initial stretch. Tolerance is 1.0 block, so 0.743 blocks of margin remain;
+  `gap_drift` stays 0.000. Whether the damper wants a small explicit term for that is a phase-B
+  question, not something to paper over with a biased input.
+
+### Measured
+
+The velocity question - why a solver reading disagrees with displacement by a constant - is answered
+by comparing both sources Sable offers, in the same tick, for both bodies of the `couple` scenario:
+
+| | front | rear |
+| --- | --- | --- |
+| solver state, m/s | 0.837 | 0.882 |
+| pose derivative, m/s | 0.879 | 0.879 |
+| displacement, blocks / 20 ticks | 0.879 | 0.878 |
+| difference solver - pose | -0.042 | +0.003 |
+
+Locked bodies must share a speed; the pose derivative gives both the same value and matches
+displacement, the solver readings straddle it. Mechanism (inference, see `README.md`, "Two speeds, and
+which one to trust"): Sable calls `sable$physicsTick` for every actor before
+`pipeline.physicsTick`, and an impulse applied once per tick is resolved in the first substep, so the
+boundary read predates the push. `scenarios=8 passed=8 failed=0`, 18 unit tests, geometry unchanged:
+`spacing=6.000 rest=10.000 gap_start=10.000 gap_end=10.257 gap_drift=0.000 extension=0.257`.
+
+
+## 0.4.1-alpha.1 (published as `0.4.1`) - the coupling settles, and a bridged train costs nothing that grows
 
 No behaviour changes. Two questions that 0.4.0 raised but did not answer are now measured, and one
 number that looked like a defect is shown to be a reading artefact.
@@ -61,7 +160,7 @@ one serialised tag, two body objects.
 covered. It is recorded in `README.md` as open until phase D, not as tested.
 
 
-## 0.4.0 - a player can bridge a train, and a coupling pulls a wagon
+## 0.4.0-alpha.1 (published as `0.4.0`) - a player can bridge a train, and a coupling pulls a wagon
 
 ### What this version adds
 
@@ -142,7 +241,7 @@ their sum is zero. The scenario asserts `|stress + extension| <= 0.5` and report
   0.3.1 for why, unchanged by this version.
 
 
-## 0.3.1 - phase A said what it did not do
+## 0.3.1-alpha.1 (published as `0.3.1`) - phase A said what it did not do
 
 ### Why this version exists
 
@@ -190,7 +289,7 @@ before multi-carriage behaviour can be judged in the world. Station and signal s
 phase D, which is where the train loop is touched again.
 
 
-## 0.3.0 - a Create train rides a body
+## 0.3.0-alpha.1 (published as `0.3.0`) - a Create train rides a body
 
 ### What this version adds
 
@@ -251,7 +350,7 @@ cause: the idling axle rolls and takes energy out. It is the model, not a miss.
 - Passengers and cargo stay on the contraption side.
 
 
-## 0.2.2 - a physics harness, and the direction of 0.2.0 called what it was
+## 0.2.2-alpha.1 (published as `0.2.2`) - a physics harness, and the direction of 0.2.0 called what it was
 
 ### Why the next version changes direction again
 
@@ -315,7 +414,7 @@ traction PASS target=1.600 speed=1.424 travelled=13.050
 derail   PASS horizontal_speed=4.472 dropped=52.413 saw_off_rail=true
 ```
 
-## 0.2.1 - fixes found by reading the rebuilt code
+## 0.2.1-alpha.1 (published as `0.2.1`) - fixes found by reading the rebuilt code
 
 0.2.0 built and booted, so the next pass went through the arithmetic and the pipeline instead.
 
@@ -357,7 +456,7 @@ derail   PASS horizontal_speed=4.472 dropped=52.413 saw_off_rail=true
 Nothing here has been driven in a world. The unit tests pin the arithmetic and the server boots
 with the mod loaded; handling, brake distance and the choice of constants are untested.
 
-## 0.2.0 - full architecture revision
+## 0.2.0-alpha.1 (published as `0.2.0`) - full architecture revision
 
 The previous versions did not work and are not carried over. This entry says what was wrong,
 what was removed, and what replaced it.

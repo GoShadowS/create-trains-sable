@@ -24,10 +24,6 @@ public record Vec(double x, double y, double z) {
         return new Vec(x * factor, y * factor, z * factor);
     }
 
-    public Vec negate() {
-        return new Vec(-x, -y, -z);
-    }
-
     public double dot(Vec other) {
         return x * other.x + y * other.y + z * other.z;
     }
@@ -54,14 +50,5 @@ public record Vec(double x, double y, double z) {
     /** Copies a game vector into the arithmetic type. */
     public static Vec of(net.minecraft.world.phys.Vec3 vector) {
         return new Vec(vector.x, vector.y, vector.z);
-    }
-
-    /** The game vector with the same components. */
-    public net.minecraft.world.phys.Vec3 toMinecraft() {
-        return new net.minecraft.world.phys.Vec3(x, y, z);
-    }
-
-    public boolean isFinite() {
-        return Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z);
     }
 }

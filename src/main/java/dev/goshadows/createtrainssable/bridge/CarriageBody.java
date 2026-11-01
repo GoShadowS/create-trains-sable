@@ -37,9 +37,6 @@ public final class CarriageBody {
 
     private final ServerSubLevel body;
     private Vec lastCentre;
-    private double lastAdvance;
-    private double lastMeasuredSpeed;
-    private double lastCommand;
 
     public CarriageBody(ServerSubLevel body) {
         this.body = body;
@@ -57,7 +54,6 @@ public final class CarriageBody {
      * @param forward       unit forward direction of the carriage in the world
      */
     public void command(double blocksPerTick, Vec forward) {
-        lastCommand = blocksPerTick;
         if (forward == null || forward.lengthSqr() < 0.5) {
             return;
         }
@@ -80,20 +76,24 @@ public final class CarriageBody {
                 ? 0.0
                 : centre.sub(lastCentre).dot(forward);
         lastCentre = centre;
-        lastAdvance = Mth.clamp(moved, -MAX_ADVANCE_PER_TICK, MAX_ADVANCE_PER_TICK);
-        return lastAdvance;
+        return Mth.clamp(moved, -MAX_ADVANCE_PER_TICK, MAX_ADVANCE_PER_TICK);
     }
 
-    /** Actual speed of the body along {@code forward}, in m/s. */
+    /**
+     * Speed of the body along {@code forward}, in m/s, as the solver reports it.
+     *
+     * <p>Diagnostics only. The solver's velocity is read inside the physics substep, before the
+     * pipeline integrates that substep, so it is a state sample and not an average over the tick:
+     * the harness measured it 0.045 m/s away from the speed the body's own displacement implies.
+     * Anything that needs a true speed must use displacement, as {@link #advance} does.</p>
+     */
     public double measuredSpeed(Vec forward) {
         RigidBodyHandle handle = RigidBodyHandle.of(body);
         if (handle == null || !handle.isValid() || forward == null) {
-            lastMeasuredSpeed = 0.0;
-            return lastMeasuredSpeed;
+            return 0.0;
         }
         Vector3dc raw = handle.getLinearVelocity(new Vector3d());
-        lastMeasuredSpeed = new Vec(raw.x(), raw.y(), raw.z()).dot(forward);
-        return lastMeasuredSpeed;
+        return new Vec(raw.x(), raw.y(), raw.z()).dot(forward);
     }
 
     /** Stops driving: the axles go back to reading their shafts, or to free rolling. */
@@ -101,25 +101,11 @@ public final class CarriageBody {
         for (TruckBlockEntity truck : trucks()) {
             truck.clearDrive();
         }
-        lastCommand = 0.0;
     }
 
     /** Forgets where the body was, so the next {@link #advance} starts from the new place. */
     public void forget() {
         lastCentre = centre();
-        lastAdvance = 0.0;
-    }
-
-    public double lastAdvance() {
-        return lastAdvance;
-    }
-
-    public double lastCommand() {
-        return lastCommand;
-    }
-
-    public double lastMeasuredSpeed() {
-        return lastMeasuredSpeed;
     }
 
     /** World position of the centre of mass. */

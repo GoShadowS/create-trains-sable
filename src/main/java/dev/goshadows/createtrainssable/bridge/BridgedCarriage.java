@@ -120,8 +120,9 @@ public final class BridgedCarriage extends Carriage {
         if (!isActive() || train == null) {
             return;
         }
-        net.createmod.catnip.data.Couple<Boolean> sides =
-                BodyConductors.of(body.body(), forward(train.graph));
+        Vec direction = forward(train.graph);
+        net.createmod.catnip.data.Couple<Boolean> sides = BodyConductors.of(body.body(),
+                new Vec3(direction.x(), direction.y(), direction.z()));
         presentConductors.setFirst(sides.getFirst());
         presentConductors.setSecond(sides.getSecond());
     }

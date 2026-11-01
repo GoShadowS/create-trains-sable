@@ -1,11 +1,14 @@
 modLoader = "javafml"
 loaderVersion = "[4,)"
 license = "Apache-2.0"
+# Applies to the code. The textures, models, blockstates and language files under assets/ are
+# All Rights Reserved - see ASSETS_LICENSE and NOTICE. There is one licence field for the mod, so the
+# split is documented in those files.
 issueTrackerURL = "https://github.com/GoShadowS/create-trains-sable/issues"
 
 [[mods]]
 modId = "createtrainssable"
-version = "0.4.2-alpha.2"
+version = "0.1.0-alpha"
 displayName = "Create Trains Sable"
 authors = "GoShadowS"
 # Original project and author. Required notice: see NOTICE and the "Original project" section of

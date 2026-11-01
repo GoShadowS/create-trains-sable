@@ -10,7 +10,6 @@ package dev.goshadows.createtrainssable.rail;
 public record Vec(double x, double y, double z) {
 
     public static final Vec ZERO = new Vec(0.0, 0.0, 0.0);
-    public static final Vec UP = new Vec(0.0, 1.0, 0.0);
 
     public Vec add(Vec other) {
         return new Vec(x + other.x, y + other.y, z + other.z);

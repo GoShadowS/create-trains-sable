@@ -6,8 +6,8 @@ abstract: "A NeoForge 1.21.1 add-on that puts Sable vehicles on Create rails wit
 authors:
   - name: "GoShadowS"
     website: "https://github.com/GoShadowS"
-version: "0.4.2-alpha.2"
-date-released: 2026-10-27
+version: "0.1.0-alpha"
+date-released: 2026-11-01
 repository-code: "https://github.com/GoShadowS/create-trains-sable"
 license: Apache-2.0
 keywords:

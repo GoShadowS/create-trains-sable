@@ -1,13 +1,15 @@
 modLoader = "javafml"
 loaderVersion = "[4,)"
-license = "MIT"
+license = "Apache-2.0"
 issueTrackerURL = "https://github.com/GoShadowS/create-trains-sable/issues"
 
 [[mods]]
 modId = "createtrainssable"
-version = "0.4.1"
+version = "0.4.2-alpha.1"
 displayName = "Create Trains Sable"
 authors = "GoShadowS"
+# Original project and author. Required notice: see NOTICE and the "Original project" section of
+# README.md. Forks must keep this line, the NOTICE file and that README section (Apache-2.0 4(d)).
 description = '''
 Physical rail vehicles for Create and Sable. Put traction and rolling trucks
 under a build, assemble it into a sub-level, and every axle holds itself on

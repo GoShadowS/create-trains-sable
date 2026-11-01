@@ -292,11 +292,6 @@ public class TruckBlockEntity extends KineticBlockEntity implements BlockEntityS
         return lastForce;
     }
 
-    /** Sideways error of this axle on the last physics tick, in blocks; used by the harness. */
-    public double lastLateralError() {
-        return lastLateralError;
-    }
-
     /** Current contact state of this axle; used by diagnostics and by tests. */
     public WheelRail.State state() {
         return state;

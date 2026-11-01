@@ -45,6 +45,10 @@ bin/
 .DS_Store
 Thumbs.db
 
+# Python caches from tools/
+__pycache__/
+*.pyc
+
 # Local development state
 local.properties
 src/generated/resources/.cache/

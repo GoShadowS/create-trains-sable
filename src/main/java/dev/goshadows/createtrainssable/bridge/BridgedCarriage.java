@@ -79,11 +79,6 @@ public final class BridgedCarriage extends Carriage {
         return travelToDate;
     }
 
-    /** Distance of the last travel step, in blocks. */
-    public double lastMoved() {
-        return lastMoved;
-    }
-
     /** Speed the body actually has along the carriage's forward direction, in m/s. */
     public double measuredSpeed() {
         return isActive() ? body.measuredSpeed(train == null ? null : forward(train.graph)) : 0.0;

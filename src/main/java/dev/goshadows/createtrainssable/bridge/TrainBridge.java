@@ -60,16 +60,8 @@ public final class TrainBridge {
             this.reports = new TrainCouplings.Report[restLengths.length];
         }
 
-        public Train train() {
-            return train;
-        }
-
         public List<BridgedCarriage> carriages() {
             return Collections.unmodifiableList(carriages);
-        }
-
-        public List<ServerSubLevel> bodies() {
-            return Collections.unmodifiableList(bodies);
         }
 
         /** Gaps the train was coupled at, one per pair of neighbouring carriages. */
@@ -228,11 +220,6 @@ public final class TrainBridge {
             }
         }
         return null;
-    }
-
-    /** How many trains are currently bridged; used by the harness and by diagnostics. */
-    public static int count() {
-        return BRIDGED.size();
     }
 
     /**

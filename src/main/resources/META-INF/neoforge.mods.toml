@@ -9,7 +9,7 @@ issueTrackerURL = "https://github.com/GoShadowS/create-trains-sable/issues"
 [[mods]]
 modId = "createtrainssable"
 version = "0.2.0-alpha"
-displayName = "Create Trains Sable"
+displayName = "Create: Sable 'n Rails"
 authors = "GoShadowS"
 # Original project and author. Required notice: see NOTICE and the "Original project" section of
 # README.md. Forks must keep this line, the NOTICE file and that README section (Apache-2.0 4(d)).

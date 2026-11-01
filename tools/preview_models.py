@@ -188,8 +188,8 @@ def main():
                 pixel = canvas[y][x]
                 if pixel[3] == 255:
                     sheet[y][index * cell + x] = pixel
-    write_png("/home/user/create-trains-sable-blocks.png", sheet)
-    print("wrote /home/user/create-trains-sable-blocks.png")
+    write_png("/home/user/sable-n-rails-blocks.png", sheet)
+    print("wrote /home/user/sable-n-rails-blocks.png")
 
 
 if __name__ == "__main__":

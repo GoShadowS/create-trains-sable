@@ -42,8 +42,8 @@ public final class CreateTrainsSable {
             // Only the physics harness asks for this; a normal game never registers the listeners.
             NeoForge.EVENT_BUS.addListener(SelfTest::onServerStarted);
             NeoForge.EVENT_BUS.addListener(SelfTest::onServerTick);
-            LOGGER.info("Create Trains Sable: physics self-test armed");
+            LOGGER.info("Create: Sable 'n Rails: physics self-test armed");
         }
-        LOGGER.info("Create Trains Sable: rail contact ready; trucks drive their own body");
+        LOGGER.info("Create: Sable 'n Rails: rail contact ready; trucks drive their own body");
     }
 }

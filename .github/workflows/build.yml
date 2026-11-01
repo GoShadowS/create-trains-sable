@@ -109,7 +109,7 @@ jobs:
           pkill -f "net.neoforged" 2>/dev/null || true
           echo "--- log tail ---"
           tail -120 /tmp/server.log
-          marker="Create Trains Sable: rail contact ready"
+          marker="Create: Sable 'n Rails: rail contact ready"
           loaded=0
           grep -qF "$marker" /tmp/server.log && loaded=1
           {

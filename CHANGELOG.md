@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.4.1 - the coupling settles, and a bridged train costs nothing that grows
+
+No behaviour changes. Two questions that 0.4.0 raised but did not answer are now measured, and one
+number that looked like a defect is shown to be a reading artefact.
+
+### The trailing body looked faster than the one pulling it
+
+`v_front=0.834` against `v_rear=0.884` in 0.4.0 looked like a wagon overtaking its locomotive. It is
+not. Measured over 600 ticks:
+
+```
+gap_at_20=10.134 gap_at_40=10.209 gap_at_80=10.240
+gap_min=10.240  gap_max=10.240  gap_drift=0.000
+rel_speed_mean=0.000 rel_speed_worst=0.000
+front_v_bias=-0.045 rear_v_bias=0.005
+```
+
+The gap grows for four seconds - the powered vehicle pulls away until the spring is stretched enough to
+carry the wagon - and then stops changing: from tick 400 to tick 600 it is 10.240 in every tick, and the
+relative speed measured from the distance each body actually covered is 0.000 m/s. The apparent
+difference between the two reported speeds is an instrument artefact: the front body's handle velocity
+reads 0.045 m/s below its own displacement rate on every tick (worst equal to mean, so a constant
+offset), while the rear's reads 0.005 above. Position is the ground truth here, and it says the pair is
+locked.
+
+### `spacing=6.000` against `rest=10.000` is geometry, not a mismatch
+
+```
+spacing_i = | P_trailing(i) - P_leading(i+1) |   on the track, fixed when the train is built
+rest_i    = | C_i - C_(i+1) |                    centres of mass, fixed at coupling
+rest_i    = spacing_i + delta_i                  delta = 4.000 for the harness rig
+```
+
+`delta` is how far each vehicle's centre sits from its carriage's reference points. Both numbers are used
+only as differences from their own zero (the spring pulls on `distance - rest`, Create computes
+`stress = spacing - anchorDistance`), so the offset cancels: 0.240 of extension against -0.240 of stress,
+sum 0.000. The consequence is worth stating plainly: **the coupling enforces the gap the bodies had at
+coupling, not the spacing the train was built with.** A consist laid out very differently from its
+spacing now gets a warning in the log at bridge time.
+
+### A bridged train was measured for a minute of game time
+
+New `soak` scenario, 1200 ticks:
+
+```
+soak PASS ticks=1200 travelled=20.982 carriage_travelled=20.982 drift=0.000
+         entities_start=0 entities_end=0 contraption_entities=0
+         heap_start_mb=603 heap_end_mb=469 lateral_max=0.000
+         ticks_holding=1200 bridged=true
+```
+
+The suppressed contraption is never instantiated, so there is no entity to tick, save or leak. Heap went
+603 MB to 469 MB with a 783 MB peak mid-run: reclaimed, not monotonic, and reported as a shape rather
+than as a leak claim. What remains allocated is bounded: one anchor object per carriage per dimension,
+one serialised tag, two body objects.
+
+**Open:** an hours-long session with chunk unload, reload and a train deleted while bridged is not
+covered. It is recorded in `README.md` as open until phase D, not as tested.
+
+
 ## 0.4.0 - a player can bridge a train, and a coupling pulls a wagon
 
 ### What this version adds

@@ -1512,6 +1512,24 @@ public final class SelfTest {
             log("forward=" + forward + " backward=" + backward
                     + " per_carriage_forward=" + Arrays.toString(perCarriageForward)
                     + " per_carriage_backward=" + Arrays.toString(perCarriageBackward));
+            if (!forward) {
+                fail("no carriage reported a driver, although one vehicle carries a lit burner and "
+                        + "a controls block facing forward");
+                return;
+            }
+            if (backward) {
+                fail("a carriage reported a driver facing backward, there is none");
+                return;
+            }
+            if (perCarriageForward[0] || perCarriageForward[2]) {
+                fail("a vehicle without a cab reported a driver: "
+                        + Arrays.toString(perCarriageForward));
+                return;
+            }
+            if (!perCarriageForward[1]) {
+                fail("the vehicle with the cab did not report its driver");
+                return;
+            }
             pass();
         }
 

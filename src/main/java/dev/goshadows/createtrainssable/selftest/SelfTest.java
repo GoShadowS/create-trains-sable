@@ -1504,9 +1504,9 @@ public final class SelfTest {
             }
             if (probe.isEmpty() && !train.carriages.isEmpty()
                     && train.carriages.get(1) instanceof BridgedCarriage middleCarriage) {
-                Vec direction = rig == null ? Vec.ZERO : Vec.of(1, 0, 0);
+                // The consist faces east, which is the direction a carriage travels in.
                 probe = dev.goshadows.createtrainssable.bridge.BodyConductors.probe(
-                        middleCarriage.body().body(), new Vec3(direction.x(), 0, direction.z()));
+                        middleCarriage.body().body(), new Vec3(1, 0, 0));
             }
             forward = train.hasForwardConductor();
             backward = train.hasBackwardConductor();

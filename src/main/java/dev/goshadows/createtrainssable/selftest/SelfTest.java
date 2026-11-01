@@ -2347,7 +2347,7 @@ public final class SelfTest {
             }
             if (entitiesEnd > entitiesStart) {
                 fail("the level gained entities while nothing was spawned: " + entitiesStart
-                        + " -> " + entitiesEnd);
+                        + " -> " + entitiesEnd + " [" + entitySummary() + "]");
                 return;
             }
             if (drift > 0.5) {
@@ -2378,6 +2378,19 @@ public final class SelfTest {
                     new ItemStack(Items.STICK));
             marker.setNoGravity(true);
             level.addFreshEntity(marker);
+        }
+
+        /** What is in the level, so a leak names itself instead of being a number. */
+        private String entitySummary() {
+            StringBuilder text = new StringBuilder();
+            for (var entity : level.getEntities().getAll()) {
+                if (text.length() > 0) {
+                    text.append(' ');
+                }
+                text.append(entity.getType().toString()).append('@')
+                        .append(entity.blockPosition().toShortString());
+            }
+            return text.toString();
         }
 
         private int countEntities() {
@@ -2416,6 +2429,7 @@ public final class SelfTest {
                     + " drift_max=" + f(drift)
                     + " entities_start=" + entitiesStart
                     + " entities_end=" + entitiesEnd
+                    + " entities=[" + entitySummary() + "]"
                     + " reference_entity_alive=" + markerAlive
                     + " contraption_entities=" + contraptions
                     + " heap_start_mb=" + (heapStart >> 20)

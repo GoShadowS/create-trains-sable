@@ -7,6 +7,12 @@ import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
 import com.simibubi.create.content.trains.entity.CarriageBogey;
 import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.graph.DimensionPalette;
+import com.simibubi.create.content.trains.schedule.Schedule;
+import com.simibubi.create.content.trains.schedule.ScheduleEntry;
+import com.simibubi.create.content.trains.schedule.destination.DestinationInstruction;
+import com.simibubi.create.content.trains.signal.SignalBlockEntity;
+import com.simibubi.create.content.trains.station.GlobalStation;
+import com.simibubi.create.content.trains.station.StationBlockEntity;
 import dev.goshadows.createtrainssable.CreateTrainsSable;
 import dev.goshadows.createtrainssable.bridge.BridgeTool;
 import dev.goshadows.createtrainssable.bridge.BridgedCarriage;
@@ -18,6 +24,7 @@ import dev.goshadows.createtrainssable.config.CTSConfig;
 import dev.goshadows.createtrainssable.rail.TruckBlockEntity;
 import dev.goshadows.createtrainssable.rail.Vec;
 import dev.goshadows.createtrainssable.rail.WheelRail;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -92,6 +99,8 @@ public final class SelfTest {
                 new CoupleScenario(),
                 new ChainScenario(),
                 new ConductorsScenario(),
+                new StationScenario("station", 1400, 2562),
+                new SignalScenario(),
                 new SoakScenario());
 
         private int index = -1;
@@ -1578,6 +1587,325 @@ public final class SelfTest {
                 rail.remove();
                 rail = null;
             }
+        }
+    }
+
+    /**
+     * Three vehicles walking to a real station on Create's own schedule.
+     *
+     * <p>The bridge answers "is there a driver" and "where is the body" but says nothing about
+     * stations, so this scenario is the proof that Create's route still works when the body is
+     * physical: a real station block beside a real track block, a real schedule with one destination,
+     * and a consist whose only cab is in the middle vehicle. Nothing in the harness asks the train to
+     * stop - Create decides where the station is, how fast to approach it and when to stand still.</p>
+     *
+     * <p>What is measured is the part a schedule cannot tell you: how far the consist rolled while it
+     * braked, where the front of the train came to rest relative to the station, and whether it came to
+     * rest at all rather than creeping past.</p>
+     */
+    private static class StationScenario extends Scenario {
+
+        static final double RAIL_FROM = 1960.5;
+        static final int RAIL_TO = 2400;
+        static final int RAIL_Y = 100;
+        static final double STATION_NODE = 2200.5;
+        static final String STATION_NAME = "harness";
+        static final int REAR_X = 2000;
+        static final int MIDDLE_X = 2010;
+        static final int FRONT_X = 2020;
+
+        final boolean wantsSignal;
+
+        TestRig middle;
+        TestRig rear;
+        TestRig.Rail rail;
+        Train train;
+        StationBlockEntity station;
+        SignalBlockEntity signalBlock;
+        BlockPos stationTrack;
+        BlockPos stationPos;
+        BlockPos signalTrack;
+        BlockPos signalPos;
+        GlobalStation point;
+        boolean named;
+        boolean arrived;
+        boolean sawRedSignal;
+        boolean waiting;
+        double frontStart = Double.NaN;
+        double frontX = Double.NaN;
+        double topSpeed;
+        double brakeFromX = Double.NaN;
+        double stopX = Double.NaN;
+        double peakBeforeBrake;
+        double closestToSignal = Double.MAX_VALUE;
+        double distanceToDestination = Double.NaN;
+        int movingTicks;
+        int stopTick = -1;
+        int waitedTicks;
+        String scheduleState = "";
+
+        StationScenario(String name, int budget, int z) {
+            this(name, budget, z, false);
+        }
+
+        StationScenario(String name, int budget, int z, boolean wantsSignal) {
+            super(name, budget, z);
+            this.wantsSignal = wantsSignal;
+        }
+
+        /** The node a signal would stand on; only a scenario that wants one asks for it. */
+        double signalNode() {
+            return Double.NaN;
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            this.level = level;
+            try {
+                rail = TestRig.rail(level, RAIL_FROM, RAIL_TO, RAIL_Y, z + 1.5);
+                rear = TestRig.assembleOn(rail, REAR_X, z, false, false);
+                middle = TestRig.assembleOn(rail, MIDDLE_X, z, false, false, Direction.EAST);
+                rig = TestRig.assembleOn(rail, FRONT_X, z, true, false);
+                List<TestRig> bodies = List.of(rig, middle, rear);
+                train = trainOf(bodies, new int[]{FRONT_X, MIDDLE_X, REAR_X});
+                TrainBridge.bridge(train, List.of(rig.body, middle.body, rear.body));
+
+                stationTrack = TestRig.trackBlock(STATION_NODE, RAIL_Y, z);
+                TestRig.placeStraightTrack(level, stationTrack);
+                stationPos = stationTrack.above();
+                // The station block entity has to tick for the station to exist, and nothing else
+                // asks the server to keep this chunk loaded, so the scenario holds its own ticket.
+                level.setChunkForced(stationPos.getX() >> 4, stationPos.getZ() >> 4, true);
+                station = TestRig.placeStation(level, stationPos, stationTrack);
+
+                double signalNode = signalNode();
+                if (!Double.isNaN(signalNode)) {
+                    signalTrack = TestRig.trackBlock(signalNode, RAIL_Y, z);
+                    TestRig.placeStraightTrack(level, signalTrack);
+                    signalPos = signalTrack.above();
+                    level.setChunkForced(signalPos.getX() >> 4, signalPos.getZ() >> 4, true);
+                    signalBlock = TestRig.placeSignal(level, signalPos, signalTrack, true);
+                }
+
+                DestinationInstruction instruction = new DestinationInstruction();
+                instruction.getData().putString("Text", STATION_NAME);
+                ScheduleEntry entry = new ScheduleEntry(instruction, new ArrayList<>());
+                Schedule schedule = new Schedule(new ArrayList<>(List.of(entry)), false, 0);
+                train.runtime.setSchedule(schedule, false);
+                frontStart = front();
+            } catch (RuntimeException | LinkageError e) {
+                CreateTrainsSable.LOGGER.error("CTS SELFTEST scenario={} could not build", name, e);
+                fail("build: " + e);
+                finished = true;
+            }
+        }
+
+        /** Where the front of the train is on the rail, in world x. */
+        double front() {
+            if (train == null || train.carriages.isEmpty()) {
+                return Double.NaN;
+            }
+            return train.carriages.get(0).getLeadingPoint().getPosition(rail.graph).x;
+        }
+
+        @Override
+        void step() {
+            if (train == null) {
+                return;
+            }
+            frontX = front();
+            double speed = Math.abs(train.speed);
+            topSpeed = Math.max(topSpeed, speed);
+            distanceToDestination = train.navigation.distanceToDestination;
+            scheduleState = train.runtime.state + "/" + train.runtime.currentEntry
+                    + (train.runtime.paused ? "(paused)" : "");
+            waiting = train.navigation.waitingForSignal != null;
+            sawRedSignal |= waiting;
+            waitedTicks = waiting ? waitedTicks + 1 : 0;
+
+            if (point == null && station != null && station.getStation() != null) {
+                point = station.getStation();
+                point.name = STATION_NAME;
+                named = true;
+                log("station_ready id=" + point.id + " named=" + named);
+            }
+
+            if (speed > 0.002) {
+                movingTicks++;
+            } else if (movingTicks > 20 && stopTick < 0) {
+                stopTick = ticks;
+                stopX = frontX;
+            }
+
+            // Braking starts on the first tick the speed falls after having risen above half of the
+            // best speed seen so far; that is the tick a station approach begins to bite, not the tick
+            // the train first moves.
+            if (Double.isNaN(brakeFromX) && topSpeed > 0.02 && speed < peakBeforeBrake * 0.999
+                    && peakBeforeBrake > topSpeed * 0.5) {
+                brakeFromX = frontX;
+            }
+            peakBeforeBrake = Math.max(peakBeforeBrake == 0 ? speed : peakBeforeBrake * 0.999, speed);
+
+            if (waiting) {
+                double signalNode = signalNode();
+                if (!Double.isNaN(signalNode)) {
+                    closestToSignal = Math.min(closestToSignal, signalNode - frontX);
+                }
+            }
+
+            if (train.getCurrentStation() != null && !arrived) {
+                arrived = true;
+                log("arrived front=" + f(frontX) + " station=" + f(STATION_NODE)
+                        + " speed=" + f(train.speed) + " tick=" + ticks);
+            }
+
+            if (ticks % 20 == 0) {
+                log("front=" + f(frontX) + " speed=" + f(train.speed)
+                        + " top=" + f(topSpeed) + " destination=" + f(distanceToDestination)
+                        + " signal_wait=" + waiting + " state=" + scheduleState
+                        + " station=" + (point != null));
+            }
+            if (ticks == 4 && point == null) {
+                log("station_block=" + (station != null)
+                        + " target=" + (station == null ? "?" : station.edgePoint.getGlobalPosition())
+                        + " valid_track=" + (station != null && station.edgePoint.hasValidTrack()));
+            }
+        }
+
+        @Override
+        void finish() {
+            if (train == null) {
+                return;
+            }
+            double restDistance = STATION_NODE - stopX;
+            if (wantsSignal) {
+                if (!sawRedSignal) {
+                    fail("the train never saw the red signal; it should have stopped for it");
+                    return;
+                }
+                if (stopTick < 0 || topSpeed < 0.02) {
+                    fail("the train never came to rest in front of the signal");
+                    return;
+                }
+                if (closestToSignal < 0) {
+                    fail("the train passed the red signal by " + f(-closestToSignal) + " blocks");
+                    return;
+                }
+                if (arrived) {
+                    fail("the train reached the station through a red signal");
+                    return;
+                }
+                pass();
+                return;
+            }
+            if (!arrived) {
+                fail("the schedule never brought the train to the station: state=" + scheduleState
+                        + " destination=" + f(distanceToDestination) + " front=" + f(frontX));
+                return;
+            }
+            if (stopTick < 0) {
+                fail("the train arrived but never came to rest");
+                return;
+            }
+            if (restDistance < -1.5) {
+                fail("the train overshot the station by " + f(-restDistance) + " blocks");
+                return;
+            }
+            pass();
+        }
+
+        @Override
+        String metrics() {
+            double restDistance = STATION_NODE - stopX;
+            double brakeDistance = Double.isNaN(brakeFromX) || Double.isNaN(stopX)
+                    ? Double.NaN : stopX - brakeFromX;
+            return "carriages=" + (train == null ? 0 : train.carriages.size())
+                    + " front_start=" + f(frontStart)
+                    + " station_node=" + f(STATION_NODE)
+                    + " top_speed=" + f(topSpeed)
+                    + " moving_ticks=" + movingTicks
+                    + " brake_from=" + f(brakeFromX)
+                    + " stop_at=" + f(stopX)
+                    + " stop_error=" + f(restDistance)
+                    + " brake_distance=" + f(brakeDistance)
+                    + " signal_node=" + f(signalNode())
+                    + " closest_to_signal=" + (closestToSignal == Double.MAX_VALUE
+                            ? "none" : f(closestToSignal))
+                    + " waited=" + sawRedSignal
+                    + " wait_ticks=" + waitedTicks
+                    + " arrived=" + arrived
+                    + " station=" + (point != null)
+                    + " state=" + scheduleState
+                    + " ticks=" + ticks;
+        }
+
+        @Override
+        void cleanup() {
+            if (train != null) {
+                TrainBridge.detach(train);
+                train.navigation.cancelNavigation();
+                Create.RAILWAYS.removeTrain(train.id);
+                train.invalid = true;
+                train = null;
+            }
+            for (TestRig body : new TestRig[]{rig, middle, rear}) {
+                if (body != null) {
+                    body.remove();
+                }
+            }
+            rig = null;
+            middle = null;
+            rear = null;
+            if (point != null && rail != null) {
+                rail.graph.removePoint(com.simibubi.create.content.trains.graph.EdgePointType.STATION,
+                        point.id);
+                point = null;
+            }
+            for (BlockPos pos : new BlockPos[]{stationPos, signalPos}) {
+                if (pos != null) {
+                    level.setBlockAndUpdate(pos, net.minecraft.world.level.block.Blocks.AIR
+                            .defaultBlockState());
+                    level.setChunkForced(pos.getX() >> 4, pos.getZ() >> 4, false);
+                }
+            }
+            for (BlockPos pos : new BlockPos[]{stationTrack, signalTrack}) {
+                if (pos != null) {
+                    TestRig.clearBlock(level, pos);
+                }
+            }
+            station = null;
+            signalBlock = null;
+            stationPos = null;
+            signalPos = null;
+            stationTrack = null;
+            signalTrack = null;
+            if (rail != null) {
+                rail.remove();
+                rail = null;
+            }
+        }
+    }
+
+    /**
+     * The same run, with a red signal between the train and its station.
+     *
+     * <p>Signals are the other half of Create's route, and they are the half a physical body can break
+     * without anyone noticing: the signal is obeyed by the navigation code, which reads the distance
+     * from the leading travelling point, and a bridged carriage whose point is driven by a body that
+     * lags or overshoots would see the signal too late. The scenario forces a real signal block red,
+     * lets Create drive the same schedule, and asks how close the train came before it stood still.</p>
+     */
+    private static final class SignalScenario extends StationScenario {
+
+        static final double SIGNAL_NODE = 2100.5;
+
+        SignalScenario() {
+            super("signal", 1400, 2572, true);
+        }
+
+        @Override
+        double signalNode() {
+            return SIGNAL_NODE;
         }
     }
 

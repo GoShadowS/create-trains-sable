@@ -1621,12 +1621,17 @@ public final class SelfTest {
         TestRig.Rail rail;
         Train train;
         StationBlockEntity station;
+        StationBlockEntity stationB;
         SignalBlockEntity signalBlock;
         BlockPos stationTrack;
         BlockPos stationPos;
+        BlockPos stationBTrack;
+        BlockPos stationBPos;
         BlockPos signalTrack;
         BlockPos signalPos;
         GlobalStation point;
+        GlobalStation pointB;
+        double arrivedAt = Double.NaN;
         boolean named;
         boolean arrived;
         boolean sawRedSignal;
@@ -1676,7 +1681,16 @@ public final class SelfTest {
                 // The station block entity has to tick for the station to exist, and nothing else
                 // asks the server to keep this chunk loaded, so the scenario holds its own ticket.
                 level.setChunkForced(stationPos.getX() >> 4, stationPos.getZ() >> 4, true);
-                station = TestRig.placeStation(level, stationPos, stationTrack);
+                station = TestRig.placeStation(level, stationPos, stationTrack, true);
+
+                // The same station facing the other way, one rail edge further east. Create decides
+                // which node of the track block a station belongs to from the way it was placed, and
+                // the harness must not guess: the run reports which of the two the route can reach.
+                stationBTrack = TestRig.trackBlock(STATION_NODE + 40, RAIL_Y, z);
+                TestRig.placeStraightTrack(level, stationBTrack);
+                stationBPos = stationBTrack.above();
+                level.setChunkForced(stationBPos.getX() >> 4, stationBPos.getZ() >> 4, true);
+                stationB = TestRig.placeStation(level, stationBPos, stationBTrack, false);
 
                 double signalNode = signalNode();
                 if (!Double.isNaN(signalNode)) {
@@ -1698,6 +1712,37 @@ public final class SelfTest {
                 fail("build: " + e);
                 finished = true;
             }
+        }
+
+        /** The x of the track block a station stands beside, which is where a train stops. */
+        double stationX(StationBlockEntity station) {
+            return station == null ? Double.NaN : station.edgePoint.getGlobalPosition().getX() + 0.5;
+        }
+
+        /** Whether Create can route this train to that station, asked once, without moving it. */
+        String reachable(GlobalStation station) {
+            if (station == null) {
+                return "none";
+            }
+            return train.navigation.findPathTo(station, 1.0e6) == null ? "no" : "yes";
+        }
+
+        /** The station point as Create stored it: both nodes and which side it can be entered from. */
+        String describe(GlobalStation station, StationBlockEntity blockEntity) {
+            if (station == null) {
+                return "none";
+            }
+            var first = rail.graph.locateNode(station.edgeLocation.getFirst());
+            var second = rail.graph.locateNode(station.edgeLocation.getSecond());
+            return station.name + "@" + f(stationX(blockEntity))
+                    + " pos=" + f(station.position)
+                    + " from_first=" + (first != null && station.canApproachFrom(first))
+                    + " from_second=" + (second != null && station.canApproachFrom(second));
+        }
+
+        /** The x of the station the train is meant to stop at. */
+        double stopTargetX() {
+            return Double.isNaN(arrivedAt) ? STATION_NODE : arrivedAt;
         }
 
         /** Where the front of the train is on the rail, in world x. */
@@ -1727,7 +1772,12 @@ public final class SelfTest {
                 point = station.getStation();
                 point.name = STATION_NAME;
                 named = true;
-                log("station_ready id=" + point.id + " named=" + named);
+                log("station_ready id=" + point.id + " x=" + f(stationX(station)));
+            }
+            if (pointB == null && stationB != null && stationB.getStation() != null) {
+                pointB = stationB.getStation();
+                pointB.name = STATION_NAME;
+                log("station_b_ready id=" + pointB.id + " x=" + f(stationX(stationB)));
             }
 
             if (speed > 0.002) {
@@ -1755,6 +1805,8 @@ public final class SelfTest {
 
             if (train.getCurrentStation() != null && !arrived) {
                 arrived = true;
+                arrivedAt = train.getCurrentStation() == point ? stationX(station)
+                        : train.getCurrentStation() == pointB ? stationX(stationB) : Double.NaN;
                 log("arrived front=" + f(frontX) + " station=" + f(STATION_NODE)
                         + " speed=" + f(train.speed) + " tick=" + ticks);
             }
@@ -1765,22 +1817,15 @@ public final class SelfTest {
                         + " signal_wait=" + waiting + " state=" + scheduleState
                         + " station=" + (point != null));
             }
-            if (ticks == 40 && point != null) {
-                var leading = train.carriages.get(0).getLeadingPoint();
+            if (ticks == 40) {
                 log("diag conductor=" + train.hasForwardConductor()
                         + " status_nav=" + train.status.navigation
                         + " status_conductor=" + train.status.conductor
                         + " paused=" + train.runtime.paused
-                        + " stations=" + rail.graph.getPoints(
-                                com.simibubi.create.content.trains.graph.EdgePointType.STATION).size()
-                        + " name=" + point.name
-                        + " point_pos=" + f(point.position)
-                        + " point_edge=" + point.edgeLocation
-                        + " leading_node1=" + (leading.node1 == null ? "null"
-                                : leading.node1.getLocation())
-                        + " leading_pos=" + f(leading.position)
-                        + " path=" + (train.navigation.findPathTo(point, 1.0e6) == null
-                                ? "null" : "found"));
+                        + " path_a=" + reachable(point)
+                        + " path_b=" + reachable(pointB)
+                        + " a=" + describe(point, station)
+                        + " b=" + describe(pointB, stationB));
             }
             if (ticks == 4 && point == null) {
                 log("station_block=" + (station != null)
@@ -1794,7 +1839,7 @@ public final class SelfTest {
             if (train == null) {
                 return;
             }
-            double restDistance = STATION_NODE - stopX;
+            double restDistance = stopTargetX() - stopX;
             if (wantsSignal) {
                 if (!sawRedSignal) {
                     fail("the train never saw the red signal; it should have stopped for it");
@@ -1833,12 +1878,13 @@ public final class SelfTest {
 
         @Override
         String metrics() {
-            double restDistance = STATION_NODE - stopX;
+            double restDistance = stopTargetX() - stopX;
             double brakeDistance = Double.isNaN(brakeFromX) || Double.isNaN(stopX)
                     ? Double.NaN : stopX - brakeFromX;
             return "carriages=" + (train == null ? 0 : train.carriages.size())
                     + " front_start=" + f(frontStart)
                     + " station_node=" + f(STATION_NODE)
+                    + " station_at=" + f(stopTargetX())
                     + " top_speed=" + f(topSpeed)
                     + " moving_ticks=" + movingTicks
                     + " brake_from=" + f(brakeFromX)
@@ -1873,26 +1919,35 @@ public final class SelfTest {
             rig = null;
             middle = null;
             rear = null;
-            if (point != null && rail != null) {
-                rail.graph.removePoint(com.simibubi.create.content.trains.graph.EdgePointType.STATION,
-                        point.id);
-                point = null;
+            if (rail != null) {
+                for (GlobalStation station : new GlobalStation[]{point, pointB}) {
+                    if (station != null) {
+                        rail.graph.removePoint(
+                                com.simibubi.create.content.trains.graph.EdgePointType.STATION,
+                                station.id);
+                    }
+                }
             }
-            for (BlockPos pos : new BlockPos[]{stationPos, signalPos}) {
+            point = null;
+            pointB = null;
+            for (BlockPos pos : new BlockPos[]{stationPos, stationBPos, signalPos}) {
                 if (pos != null) {
                     level.setBlockAndUpdate(pos, net.minecraft.world.level.block.Blocks.AIR
                             .defaultBlockState());
                     level.setChunkForced(pos.getX() >> 4, pos.getZ() >> 4, false);
                 }
             }
-            for (BlockPos pos : new BlockPos[]{stationTrack, signalTrack}) {
+            for (BlockPos pos : new BlockPos[]{stationTrack, stationBTrack, signalTrack}) {
                 if (pos != null) {
                     TestRig.clearBlock(level, pos);
                 }
             }
             station = null;
+            stationB = null;
             signalBlock = null;
             stationPos = null;
+            stationBPos = null;
+            stationBTrack = null;
             signalPos = null;
             stationTrack = null;
             signalTrack = null;

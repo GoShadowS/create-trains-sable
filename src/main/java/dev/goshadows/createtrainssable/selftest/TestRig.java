@@ -195,12 +195,24 @@ final class TestRig {
      * point on its next tick.</p>
      */
     static StationBlockEntity placeStation(ServerLevel level, BlockPos pos, BlockPos track) {
+        return placeStation(level, pos, track, true);
+    }
+
+    /**
+     * Places a real station, pointing it at the track from one side or the other.
+     *
+     * <p>Create lets the player choose which way the station faces when placing it, and that choice
+     * decides which of the two nodes of the track block the station belongs to. Both are offered here
+     * because the harness may not assume the answer.</p>
+     */
+    static StationBlockEntity placeStation(ServerLevel level, BlockPos pos, BlockPos track,
+                                           boolean positive) {
         level.setBlockAndUpdate(pos, AllBlocks.TRACK_STATION.getDefaultState());
         BlockEntity blockEntity = level.getBlockEntity(pos);
         if (!(blockEntity instanceof StationBlockEntity station)) {
             throw new IllegalStateException("no station block entity at " + pos);
         }
-        aim(station.edgePoint, pos, track);
+        aim(station.edgePoint, pos, track, positive);
         return station;
     }
 
@@ -214,7 +226,7 @@ final class TestRig {
         if (!(blockEntity instanceof SignalBlockEntity signal)) {
             throw new IllegalStateException("no signal block entity at " + pos);
         }
-        aim(signal.edgePoint, pos, track);
+        aim(signal.edgePoint, pos, track, true);
         return signal;
     }
 
@@ -225,10 +237,11 @@ final class TestRig {
      * data, and the behaviour reads it back. Writing the same two tags and calling the same read is
      * therefore the placement path, not a shortcut around it.</p>
      */
-    private static void aim(TrackTargetingBehaviour<?> behaviour, BlockPos pos, BlockPos track) {
+    private static void aim(TrackTargetingBehaviour<?> behaviour, BlockPos pos, BlockPos track,
+                            boolean positive) {
         CompoundTag tag = new CompoundTag();
         tag.put("TargetTrack", NbtUtils.writeBlockPos(track.subtract(pos)));
-        tag.putBoolean("TargetDirection", true);
+        tag.putBoolean("TargetDirection", positive);
         tag.putBoolean("Ortho", true);
         behaviour.read(tag, behaviour.getWorld().registryAccess(), false);
     }

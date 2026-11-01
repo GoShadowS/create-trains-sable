@@ -1765,6 +1765,23 @@ public final class SelfTest {
                         + " signal_wait=" + waiting + " state=" + scheduleState
                         + " station=" + (point != null));
             }
+            if (ticks == 40 && point != null) {
+                var leading = train.carriages.get(0).getLeadingPoint();
+                log("diag conductor=" + train.hasForwardConductor()
+                        + " status_nav=" + train.status.navigation
+                        + " status_conductor=" + train.status.conductor
+                        + " paused=" + train.runtime.paused
+                        + " stations=" + rail.graph.getPoints(
+                                com.simibubi.create.content.trains.graph.EdgePointType.STATION).size()
+                        + " name=" + point.name
+                        + " point_pos=" + f(point.position)
+                        + " point_edge=" + point.edgeLocation
+                        + " leading_node1=" + (leading.node1 == null ? "null"
+                                : leading.node1.getLocation())
+                        + " leading_pos=" + f(leading.position)
+                        + " path=" + (train.navigation.findPathTo(point, 1.0e6) == null
+                                ? "null" : "found"));
+            }
             if (ticks == 4 && point == null) {
                 log("station_block=" + (station != null)
                         + " target=" + (station == null ? "?" : station.edgePoint.getGlobalPosition())

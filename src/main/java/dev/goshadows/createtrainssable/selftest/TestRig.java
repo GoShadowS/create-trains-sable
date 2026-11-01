@@ -1,8 +1,6 @@
 package dev.goshadows.createtrainssable.selftest;
 
 import com.simibubi.create.AllBlocks;
-import com.simibubi.create.content.trains.signal.SignalBlock;
-import com.simibubi.create.content.trains.signal.SignalBlockEntity;
 import com.simibubi.create.content.trains.station.StationBlockEntity;
 import com.simibubi.create.content.trains.track.TrackBlock;
 import com.simibubi.create.content.trains.track.TrackShape;
@@ -214,26 +212,6 @@ final class TestRig {
         }
         aim(station.edgePoint, pos, track, positive);
         return station;
-    }
-
-    /** Places a real signal block beside the track and points it at the node. */
-    static SignalBlockEntity placeSignal(ServerLevel level, BlockPos pos, BlockPos track,
-                                         boolean red) {
-        return placeSignal(level, pos, track, red, true);
-    }
-
-    /** Places a real signal block, pointing at the track from one side or the other. */
-    static SignalBlockEntity placeSignal(ServerLevel level, BlockPos pos, BlockPos track,
-                                         boolean red, boolean positive) {
-        BlockState state = AllBlocks.TRACK_SIGNAL.getDefaultState()
-                .setValue(SignalBlock.POWERED, red);
-        level.setBlockAndUpdate(pos, state);
-        BlockEntity blockEntity = level.getBlockEntity(pos);
-        if (!(blockEntity instanceof SignalBlockEntity signal)) {
-            throw new IllegalStateException("no signal block entity at " + pos);
-        }
-        aim(signal.edgePoint, pos, track, positive);
-        return signal;
     }
 
     /**

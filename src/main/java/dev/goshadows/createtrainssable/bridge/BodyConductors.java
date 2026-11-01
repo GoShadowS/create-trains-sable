@@ -4,16 +4,15 @@ import com.simibubi.create.AllBlocks;
 import com.simibubi.create.api.behaviour.interaction.ConductorBlockInteractionBehavior;
 import com.simibubi.create.api.behaviour.interaction.MovingInteractionBehaviour;
 import com.simibubi.create.content.contraptions.actors.trainControls.ControlsBlock;
-import dev.ryanhcode.sable.api.sublevel.KinematicContraption;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.createmod.catnip.data.Couple;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Vector3d;
 
 /**
  * Finds the driver of a physical vehicle, the way Create finds one inside a contraption.
@@ -45,33 +44,24 @@ public final class BodyConductors {
      */
     public static Couple<Boolean> of(ServerSubLevel body, Vec3 forward) {
         Couple<Boolean> sides = Couple.create(false, false);
-        if (!(body instanceof KinematicContraption contraption) || forward == null
-                || forward.lengthSqr() < 1.0e-6) {
+        if (body == null || forward == null || forward.lengthSqr() < 1.0e-6) {
             return sides;
         }
-        BlockGetter blocks = contraption.sable$blockGetter();
         Direction axis = localAxis(body, forward);
-        if (blocks == null || axis == null) {
-            return sides;
-        }
         BoundingBox3ic bounds = body.getPlot().getBoundingBox();
-        if (bounds.volume() <= 0 || bounds.volume() > MAX_BLOCKS) {
+        if (axis == null || bounds.volume() <= 0 || bounds.volume() > MAX_BLOCKS) {
             return sides;
         }
         for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
             for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
                 for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
                     BlockPos pos = new BlockPos(x, y, z);
-                    if (!isConductor(blocks.getBlockState(pos))) {
+                    if (!isConductor(body, pos)) {
                         continue;
                     }
                     for (Direction side : new Direction[]{axis, axis.getOpposite()}) {
-                        if (inControl(blocks, pos, side)) {
-                            if (side == axis) {
-                                sides.setFirst(true);
-                            } else {
-                                sides.setSecond(true);
-                            }
+                        if (inControl(body, pos, side)) {
+                            sides.set(side == axis, true);
                         }
                     }
                 }
@@ -84,29 +74,26 @@ public final class BodyConductors {
      * A one-line description of what the scan saw, for the harness.
      *
      * <p>It exists because "no driver found" has several very different causes - an empty bounding
-     * box, a block accessor looking at the wrong coordinates, a burner that is not lit, a controls
-     * block facing the wrong way - and a failed assertion alone does not say which.</p>
+     * box, a look at the wrong coordinates, a burner that is not lit, a controls block facing the
+     * wrong way - and a failed assertion alone does not say which.</p>
      */
     public static String probe(ServerSubLevel body, Vec3 forward) {
-        if (!(body instanceof KinematicContraption contraption)) {
-            return "not a contraption";
+        if (body == null) {
+            return "no body";
         }
         BoundingBox3ic bounds = body.getPlot().getBoundingBox();
-        BlockGetter blocks = contraption.sable$blockGetter();
-        Direction axis = forward == null ? null : localAxis(body, forward);
-        if (blocks == null) {
-            return "no block getter; bounds volume=" + bounds.volume();
-        }
         int nonAir = 0;
-        int conductors = 0;
-        int controls = 0;
+        int burners = 0;
         int lit = 0;
+        int controls = 0;
+        int conductors = 0;
         if (bounds.volume() > 0 && bounds.volume() <= MAX_BLOCKS) {
             for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
                 for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
                     for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
-                        BlockState state = blocks.getBlockState(new BlockPos(x, y, z));
-                        if (state.isAir()) {
+                        BlockPos pos = new BlockPos(x, y, z);
+                        BlockState state = stateAt(body, pos);
+                        if (state == null || state.isAir()) {
                             continue;
                         }
                         nonAir++;
@@ -114,9 +101,12 @@ public final class BodyConductors {
                             controls++;
                         }
                         if (AllBlocks.BLAZE_BURNER.has(state)) {
-                            lit++;
+                            burners++;
+                            if (isConductor(body, pos)) {
+                                lit++;
+                            }
                         }
-                        if (isConductor(state)) {
+                        if (isConductor(body, pos)) {
                             conductors++;
                         }
                     }
@@ -126,15 +116,30 @@ public final class BodyConductors {
         return "bounds=" + bounds.minX() + "," + bounds.minY() + "," + bounds.minZ() + ".."
                 + bounds.maxX() + "," + bounds.maxY() + "," + bounds.maxZ()
                 + " volume=" + bounds.volume()
-                + " non_air=" + nonAir + " burners=" + lit + " controls=" + controls
-                + " conductors=" + conductors + " axis=" + axis
+                + " non_air=" + nonAir + " burners=" + burners + " lit=" + lit
+                + " controls=" + controls + " conductors=" + conductors
+                + " axis=" + (forward == null ? null : localAxis(body, forward))
                 + " sides=" + of(body, forward);
     }
 
+    /**
+     * Reads a block of the body.
+     *
+     * <p>A sub-level's blocks are not in any level a mod can query through {@code World}, they live in
+     * the chunks of the plot, keyed by plot-local coordinates. {@code EmbeddedPlotLevelAccessor} looks
+     * like the tool for this and is not: its coordinates are offset by the plot centre, so it reads
+     * the world around the vehicle instead of the vehicle.</p>
+     */
+    private static BlockState stateAt(ServerSubLevel body, BlockPos pos) {
+        LevelChunk chunk = body.getPlot()
+                .getChunk(new ChunkPos(pos.getX() >> 4, pos.getZ() >> 4));
+        return chunk == null ? null : chunk.getBlockState(pos);
+    }
+
     /** Whether a train controls block sits on {@code side} of {@code pos} and faces away from it. */
-    private static boolean inControl(BlockGetter blocks, BlockPos pos, Direction side) {
-        BlockState control = blocks.getBlockState(pos.relative(side));
-        if (!AllBlocks.TRAIN_CONTROLS.has(control)) {
+    private static boolean inControl(ServerSubLevel body, BlockPos pos, Direction side) {
+        BlockState control = stateAt(body, pos.relative(side));
+        if (control == null || !AllBlocks.TRAIN_CONTROLS.has(control)) {
             return false;
         }
         return control.getValue(ControlsBlock.FACING) == side.getOpposite();
@@ -143,11 +148,12 @@ public final class BodyConductors {
     /**
      * The block that can drive, by Create's own definition.
      *
-     * <p>Create's registry is keyed by block and the burner only counts while it is lit, so the
+     * <p>Create's registry is keyed by block and a burner only counts while it is lit, so the
      * behaviour is asked whether this particular state is a conductor.</p>
      */
-    private static boolean isConductor(BlockState state) {
-        if (state.isAir()) {
+    private static boolean isConductor(ServerSubLevel body, BlockPos pos) {
+        BlockState state = stateAt(body, pos);
+        if (state == null || state.isAir()) {
             return false;
         }
         MovingInteractionBehaviour behaviour =
@@ -158,8 +164,8 @@ public final class BodyConductors {
 
     /** The horizontal local axis a world direction points along, or {@code null} for a diagonal. */
     private static Direction localAxis(ServerSubLevel body, Vec3 forward) {
-        Vector3d local = body.logicalPose()
-                .transformNormalInverse(new Vector3d(forward.x, forward.y, forward.z));
+        org.joml.Vector3d local = body.logicalPose()
+                .transformNormalInverse(new org.joml.Vector3d(forward.x, forward.y, forward.z));
         double ax = Math.abs(local.x);
         double az = Math.abs(local.z);
         if (Math.max(ax, az) < 1.0e-4 || Math.abs(ax - az) < 1.0e-4) {

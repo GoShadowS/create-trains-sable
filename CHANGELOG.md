@@ -46,13 +46,14 @@ New `soak` scenario, 1200 ticks:
 
 ```
 soak PASS ticks=1200 travelled=20.982 carriage_travelled=20.982 drift=0.000
-         entities_start=0 entities_end=0 contraption_entities=0
-         heap_start_mb=603 heap_end_mb=469 lateral_max=0.000
+         entities_start=7 entities_end=7 contraption_entities=0
+         heap_start_mb=607 heap_end_mb=495 lateral_max=0.000
          ticks_holding=1200 bridged=true
 ```
 
-The suppressed contraption is never instantiated, so there is no entity to tick, save or leak. Heap went
-603 MB to 469 MB with a 783 MB peak mid-run: reclaimed, not monotonic, and reported as a shape rather
+The suppressed contraption is never instantiated, so there is no entity to tick, save or leak; the level
+holds the same seven item entities from earlier scenarios before and after. Heap went 607 MB to 495 MB,
+with telemetry reading 751 MB early in the run: reclaimed, not monotonic, and reported as a shape rather
 than as a leak claim. What remains allocated is bounded: one anchor object per carriage per dimension,
 one serialised tag, two body objects.
 

@@ -268,8 +268,8 @@ couple   PASS spacing=6.000 rest=10.000 rest_minus_spacing=4.000
               front_moved=25.073 rear_moved=24.833
               trailer_driven=false derailed=false
 soak     PASS ticks=1200 travelled=20.982 carriage_travelled=20.982 drift=0.000
-              entities_start=0 entities_end=0 contraption_entities=0
-              heap_start_mb=603 heap_end_mb=469
+              entities_start=7 entities_end=7 contraption_entities=0
+              heap_start_mb=607 heap_end_mb=495
               lateral_max=0.000 ticks_holding=1200 bridged=true
 ```
 
@@ -334,10 +334,11 @@ spring's force are describing different geometry.
 The `soak` scenario runs a bridged train for 1200 ticks - one minute of game time - and watches the
 things a long session would expose:
 
-- **entities:** 0 before, 0 after, and **0 `CarriageContraptionEntity`** at any point. The suppressed
-  contraption is never instantiated: there is no entity to tick, no entity to save and none to leak.
-- **heap:** 603 MB at the start, 469 MB at the end, with a peak of 783 MB mid-run. It is not monotonic,
-  and the JVM reclaimed more than the run allocated; this is a shape, not a leak claim.
+- **entities:** 7 before, 7 after - the same seven item entities the earlier scenarios left behind - and
+  **0 `CarriageContraptionEntity`** at any point. The suppressed contraption is never instantiated: there
+  is no entity to tick, no entity to save and none to leak.
+- **heap:** 607 MB at the start, 495 MB at the end, with telemetry reading 751 MB early in the run. It is
+  not monotonic and the JVM reclaimed more than the run allocated; this is a shape, not a leak claim.
 - **bridge integrity:** the carriage still follows the body (`drift=0.000` over the minute), every axle
   held its rail for 1200 of 1200 ticks, and the lateral error never exceeded 0.000 blocks.
 

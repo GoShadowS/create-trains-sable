@@ -1725,7 +1725,7 @@ public final class SelfTest {
         private final double[] carriageTravelled = new double[3];
         private Entity marker;
         private boolean markerAlive;
-        private int entitiesStart;
+        private int entitiesStart = -1;
         private int entitiesEnd;
         private int contraptions;
         private long heapStart;
@@ -1756,8 +1756,6 @@ public final class SelfTest {
                     startX[i] = bodies.get(i).centre().x();
                 }
                 spawnMarker();
-                entitiesStart = countEntities();
-                heapStart = usedHeap();
             } catch (RuntimeException | LinkageError e) {
                 fail("train: " + e);
                 finished = true;
@@ -1768,6 +1766,16 @@ public final class SelfTest {
         void step() {
             if (rig == null || train == null || bridged.size() != bodies.size()) {
                 return;
+            }
+            if (entitiesStart < 0) {
+                // The baseline is taken on the first tick that can see the reference entity: an
+                // entity added during this scenario's begin() is still pending, and a count of zero
+                // at both ends of the run is a check that cannot fail.
+                int live = countEntities();
+                if (live >= 1) {
+                    entitiesStart = live;
+                    heapStart = usedHeap();
+                }
             }
             train.manualTick = true;
             train.targetSpeed = COMMAND;
@@ -1831,7 +1839,7 @@ public final class SelfTest {
                 return;
             }
             if (entitiesStart < 1) {
-                fail("the level held no entity at the start, so the leak check measured nothing");
+                fail("the level never held a reference entity, so the leak check measured nothing");
                 return;
             }
             if (!markerAlive) {

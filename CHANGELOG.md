@@ -65,12 +65,31 @@ Dead code that no longer had a caller after the bridge and the soak scenario: `W
 `tools/__pycache__/` directory (now ignored). The unused `lastAdvance`, `lastCommand` and
 `lastMeasuredSpeed` fields went with their getters.
 
+### Changed
+
+- The damping term in `TrainBridge.couple` now reads each body's speed from the pose Sable
+  integrated (`ServerSubLevel.latestLinearVelocity`) instead of the solver state
+  (`RigidBodyHandle.getLinearVelocity`). The two disagree by a per-body constant - measured -0.045 m/s
+  on the driven body and +0.005 m/s on the passive one in the same run - and the damping term works on
+  the *difference*, so those biases added up instead of cancelling. Nothing in the coupling geometry
+  changed; only the input to the damper.
+
 ### Measured
 
-The velocity question - why a solver velocity reading disagrees with displacement by a constant -
-is answered in this release by comparing the two sources Sable offers in the same tick; the numbers
-are in the PR and in `README.md` under "Two speeds, and which one to trust". No physics behaviour
-changed: `scenarios=8 passed=8 failed=0`.
+The velocity question - why a solver reading disagrees with displacement by a constant - is answered
+by comparing both sources Sable offers, in the same tick, for both bodies of the `couple` scenario:
+
+| | front | rear |
+| --- | --- | --- |
+| solver state, m/s | 0.834 | 0.884 |
+| pose derivative, m/s | 0.879 | 0.879 |
+| difference | -0.045 | +0.005 |
+
+Locked bodies must share a speed, and the pose-derived one does; the solver readings straddle it. The
+cause is documented in `README.md` under "Two speeds, and which one to trust": Sable calls
+`sable$physicsTick` for every actor before `pipeline.physicsTick`, so a read there is the state before
+the substep's impulses are resolved. `scenarios=8 passed=8 failed=0`, 18 unit tests, same geometry:
+`gap_end=10.240 gap_drift=0.000`.
 
 
 ## 0.4.1-alpha.1 (published as `0.4.1`) - the coupling settles, and a bridged train costs nothing that grows

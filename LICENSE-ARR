@@ -13,6 +13,7 @@ The code and the assets of this project are licensed separately.
       src/test/java/**
       build.gradle, settings.gradle, gradle.properties
       tools/**
+      src/main/resources/data/**
       the documentation files in the repository root: README.md, CHANGELOG.md,
       CONTRIBUTING.md
 
@@ -39,6 +40,13 @@ WHAT YOU MAY DO WITHOUT ASKING
    that is allowed - together with the attribution required by NOTICE.
 3. Look at the assets, learn from them, and generate your own from scratch.
 4. Fork the code under Apache-2.0 and replace every asset under assets/ with your own.
+
+
+WHERE A FILE IS LISTED IN NEITHER PLACE
+
+The two lists cover the repository. If a file is added and this list is not updated, it is
+covered by the stricter of the two until it is classified: anything under
+src/main/resources/assets/ is an asset, everything else is code.
 
 
 WHAT YOU MAY NOT DO WITHOUT THE AUTHOR'S WRITTEN PERMISSION

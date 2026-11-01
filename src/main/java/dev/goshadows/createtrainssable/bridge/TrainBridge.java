@@ -165,6 +165,25 @@ public final class TrainBridge {
         CreateTrainsSable.LOGGER.info(
                 "Bridged train {}: carriages={} bodies={} rests={}", train.id, carriages.size(),
                 bodies.size(), describe(rests));
+
+        // The two numbers that describe a gap measure different things: the train's spacing is the
+        // distance between the carriages' facing points along the track, the spring's rest length is
+        // the distance between the bodies' centres of mass at the moment of coupling. The difference
+        // is fixed by how far each vehicle's centre sits from its carriage's reference point, so it
+        // is a constant per consist and it cancels in the deformation. It does not cancel in what
+        // Create thinks the stress is, and a consist laid out very differently from the spacing the
+        // train was built with will show a permanent stress the spring does not feel.
+        for (int i = 0; i < rests.length && i < train.carriageSpacing.size(); i++) {
+            double spacing = train.carriageSpacing.get(i);
+            double offset = rests[i] - spacing;
+            if (Math.abs(offset) > 2.0) {
+                CreateTrainsSable.LOGGER.warn(
+                        "Gap {} of train {}: the bodies are {} blocks apart but the train's spacing is"
+                                + " {}; Create will report stress the spring does not feel",
+                        i, train.id, String.format(java.util.Locale.ROOT, "%.3f", rests[i]),
+                        (int) spacing);
+            }
+        }
         return bridge;
     }
 

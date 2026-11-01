@@ -3,6 +3,7 @@ package dev.goshadows.createtrainssable.selftest;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.Create;
 import com.simibubi.create.content.trains.entity.Carriage;
+import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
 import com.simibubi.create.content.trains.entity.CarriageBogey;
 import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.graph.DimensionPalette;
@@ -82,7 +83,8 @@ public final class SelfTest {
                 new DerailScenario(),
                 new BridgeScenario(),
                 new EntryScenario(),
-                new CoupleScenario());
+                new CoupleScenario(),
+                new SoakScenario());
 
         private int index = -1;
         private int passed;
@@ -1036,10 +1038,22 @@ public final class SelfTest {
      * the train was given, the gap the bodies actually have, and the deformation between them -
      * both the spring's own measure and Create's {@code Train.stress}, which is computed from the
      * carriages' track anchors and should agree with it in sign and size.</p>
+     *
+     * <p>It also answers a question the first run raised: the trailing body was measured faster than
+     * the leading one while the gap between them did not change. Those two statements cannot both be
+     * true of a steady state, so the scenario now measures the rate the gap actually changes at, per
+     * tick, over its last {@value #SETTLE_TICKS} ticks, and compares it with the instantaneous
+     * difference of the two bodies' velocities. Averaged relative speed near zero with a non-zero
+     * instantaneous difference is a vibration of the contact; a persistent mean is a real defect that
+     * would separate the vehicles for good.</p>
      */
     private static final class CoupleScenario extends Scenario {
 
         private static final double COMMAND = 0.08;
+        private static final double DT = 1.0 / 20.0;
+        /** Ticks of settled running at the end of the scenario, used for every convergence number. */
+        private static final int SETTLE_TICKS = 200;
+        private static final int END = 600;
         private static final int TRAILER_X = 2000;
         private static final int LEADER_X = 2010;
         private static final int RAIL_FROM = 1960;
@@ -1064,9 +1078,34 @@ public final class SelfTest {
         private double startFront;
         private double startRear;
         private boolean trailerDriven;
+        private double gapDrift;
+        private double meanRelative = Double.NaN;
+        private double instantRelative;
+        private double frontBiasMean = Double.NaN;
+        private double rearBiasMean = Double.NaN;
+
+        private double frontMass;
+        private double rearMass;
+        private double prevFrontX = Double.NaN;
+        private double prevRearX = Double.NaN;
+        private double gapMin = Double.MAX_VALUE;
+        private double gapMax = -Double.MAX_VALUE;
+        private double gapAtSettleStart = Double.NaN;
+        private double relativeSum;
+        private int relativeCount;
+        private double relativeWorst;
+        private double frontBiasSum;
+        private double rearBiasSum;
+        private double frontBiasWorst;
+        private double rearBiasWorst;
+        private int biasCount;
+        private double gapAt20 = Double.NaN;
+        private double gapAt40 = Double.NaN;
+        private double gapAt80 = Double.NaN;
+        private int ticksInContact = 1;
 
         CoupleScenario() {
-            super("couple", 260, 2552);
+            super("couple", END, 2552);
         }
 
         @Override
@@ -1111,6 +1150,8 @@ public final class SelfTest {
             startRear = trailer.centre().x();
             gapStart = Math.abs(startFront - startRear);
             rest = bridge.restLengths()[0];
+            frontMass = rig.mass();
+            rearMass = trailer.mass();
         }
 
         private static CarriageBogey bogeyAt(TestRig rig, double axleX) {
@@ -1131,6 +1172,52 @@ public final class SelfTest {
             if (!reports.isEmpty()) {
                 extension = reports.getFirst().extension();
                 peakExtension = Math.max(peakExtension, Math.abs(extension));
+            }
+
+            // How fast the gap is really changing, tick by tick, against what the two handles say
+            // the speeds are right now. The two must agree; if they do not, one of them is lying.
+            double frontX = rig.centre().x();
+            double rearX = trailer.centre().x();
+            double gapNow = Math.abs(frontX - rearX);
+            if (ticks == 20) {
+                gapAt20 = gapNow;
+            }
+            if (ticks == 40) {
+                gapAt40 = gapNow;
+            }
+            if (ticks == 80) {
+                gapAt80 = gapNow;
+            }
+            if (ticks > END - SETTLE_TICKS) {
+                if (Double.isNaN(gapAtSettleStart)) {
+                    gapAtSettleStart = gapNow;
+                }
+                gapMin = Math.min(gapMin, gapNow);
+                gapMax = Math.max(gapMax, gapNow);
+                if (!Double.isNaN(prevFrontX)) {
+                    double frontByPosition = (frontX - prevFrontX) / DT;
+                    double rearByPosition = (rearX - prevRearX) / DT;
+                    double relative = rearByPosition - frontByPosition;
+                    relativeSum += relative;
+                    relativeCount++;
+                    relativeWorst = Math.max(relativeWorst, Math.abs(relative));
+
+                    // How far the handle's own velocity is from what the body actually did in the
+                    // tick. A body cannot move at one speed and displace at another; if these two
+                    // disagree, the velocity read is the one to distrust.
+                    double frontBias = rig.velocity().x() - frontByPosition;
+                    double rearBias = trailer.velocity().x() - rearByPosition;
+                    frontBiasSum += frontBias;
+                    rearBiasSum += rearBias;
+                    frontBiasWorst = Math.max(frontBiasWorst, Math.abs(frontBias));
+                    rearBiasWorst = Math.max(rearBiasWorst, Math.abs(rearBias));
+                    biasCount++;
+                }
+            }
+            prevFrontX = frontX;
+            prevRearX = rearX;
+            if (!rig.states().contains("NO_TRACK") && !rig.states().contains("OFF_RAIL")) {
+                ticksInContact++;
             }
             if (ticks % 20 == 0) {
                 log("front=" + f(rig.centre().x() - startFront)
@@ -1174,6 +1261,10 @@ public final class SelfTest {
                 return;
             }
             gapEnd = gap();
+            gapDrift = gapEnd - gapAtSettleStart;
+            meanRelative = relativeCount == 0 ? Double.NaN : relativeSum / relativeCount;
+            frontBiasMean = biasCount == 0 ? Double.NaN : frontBiasSum / biasCount;
+            rearBiasMean = biasCount == 0 ? Double.NaN : rearBiasSum / biasCount;
             frontSpeed = rig.velocity().x();
             rearSpeed = trailer.velocity().x();
             frontMoved = rig.centre().x() - startFront;
@@ -1205,6 +1296,19 @@ public final class SelfTest {
                 fail("the unpowered vehicle lags: front=" + f(frontSpeed) + " rear=" + f(rearSpeed));
                 return;
             }
+            if (!(Math.abs(meanRelative) <= 0.02)) {
+                fail("the gap between the bodies keeps changing: " + f(meanRelative) + " m/s over "
+                        + SETTLE_TICKS + " ticks");
+                return;
+            }
+            if (!(Math.abs(gapDrift) <= 0.05)) {
+                fail("the gap drifted " + f(gapDrift) + " blocks over " + SETTLE_TICKS + " ticks");
+                return;
+            }
+            if (ticksInContact < 0.9 * ticks) {
+                fail("the bodies left the rail for " + (ticks - ticksInContact) + " ticks");
+                return;
+            }
             if (Math.abs(extension) > 1.0) {
                 fail("the coupling deformed more than a block: " + f(extension));
                 return;
@@ -1223,10 +1327,22 @@ public final class SelfTest {
         String metrics() {
             return "spacing=" + f(spacing)
                     + " rest=" + f(rest)
+                    + " rest_minus_spacing=" + f(rest - spacing)
                     + " gap_start=" + f(gapStart)
                     + " gap_end=" + f(gapEnd)
                     + " extension=" + f(extension)
                     + " peak_extension=" + f(peakExtension)
+                    + " gap_at_20=" + f(gapAt20) + " gap_at_40=" + f(gapAt40)
+                    + " gap_at_80=" + f(gapAt80)
+                    + " gap_min=" + f(gapMin) + " gap_max=" + f(gapMax)
+                    + " gap_drift=" + f(gapDrift)
+                    + " rel_speed_mean=" + f(meanRelative)
+                    + " rel_speed_instant=" + f(instantRelative)
+                    + " rel_speed_worst=" + f(relativeWorst)
+                    + " front_v_bias=" + f(frontBiasMean) + " rear_v_bias=" + f(rearBiasMean)
+                    + " front_v_bias_worst=" + f(frontBiasWorst)
+                    + " rear_v_bias_worst=" + f(rearBiasWorst)
+                    + " m_front=" + f(frontMass) + " m_rear=" + f(rearMass)
                     + " train_deformation=" + f(stressCreate)
                     + " v_front=" + f(frontSpeed)
                     + " v_rear=" + f(rearSpeed)
@@ -1257,6 +1373,178 @@ public final class SelfTest {
                 rail.remove();
                 rail = null;
             }
+        }
+    }
+
+
+    /**
+     * A bridged train left running for a minute of game time, watched for cost.
+     *
+     * <p>Suppressing a carriage's contraption entity is the one architectural choice in the bridge
+     * that could cost something over a long session, so this scenario measures instead of asserting
+     * from reading the code: how many entities the level holds before and after, whether any
+     * {@link CarriageContraptionEntity} exists at all, how much heap the run grew by, whether the
+     * carriage still follows the body, and for how many ticks every axle held its rail.</p>
+     *
+     * <p>A minute of game time is not hours, and the JVM's heap number is indicative rather than
+     * exact; both are reported as measurements and only the structural claims are asserted. The
+     * longer question - a session of several hours with chunk unloads - is recorded in the README as
+     * open rather than answered here.</p>
+     */
+    private static final class SoakScenario extends Scenario {
+
+        /** Slow enough that a minute of running stays inside the rig's rail. */
+        private static final double COMMAND = 0.02;
+        private static final int END = 1200;
+
+        private Train train;
+        private BridgedCarriage bridged;
+        private double startCentre;
+        private int entitiesStart;
+        private int entitiesEnd;
+        private int contraptions;
+        private long heapStart;
+        private long heapEnd;
+        private double travelled;
+        private double trainTravelled;
+        private double lateralMax;
+        private int ticksHolding;
+
+        SoakScenario() {
+            super("soak", END, 2640);
+        }
+
+        @Override
+        void begin(ServerLevel level) {
+            super.begin(level);
+            if (rig == null) {
+                return;
+            }
+            try {
+                train = singleCarriageTrain(rig, 2001.5, 2003.5);
+                train.targetSpeed = COMMAND;
+                TrainBridge.Bridge bridge = TrainBridge.bridge(train, rig.body);
+                bridged = bridge.carriages().getFirst();
+                startCentre = rig.centre().x();
+                entitiesStart = countEntities();
+                heapStart = usedHeap();
+            } catch (RuntimeException | LinkageError e) {
+                fail("train: " + e);
+                finished = true;
+            }
+        }
+
+        @Override
+        void step() {
+            if (rig == null || train == null || bridged == null) {
+                return;
+            }
+            train.manualTick = true;
+            train.targetSpeed = COMMAND;
+            train.approachTargetSpeed(1.0f);
+            lateralMax = Math.max(lateralMax, rig.lateralError());
+            if (rig.states().contains("GUIDING")) {
+                ticksHolding++;
+            }
+            if (ticks % 200 == 0) {
+                log("x=" + f(rig.centre().x() - startCentre)
+                        + " speed=" + f(bridged.measuredSpeed())
+                        + " entities=" + countEntities()
+                        + " heap_mb=" + (usedHeap() >> 20)
+                        + " " + states());
+            }
+        }
+
+        @Override
+        void finish() {
+            if (rig == null || train == null || bridged == null) {
+                fail("no train");
+                return;
+            }
+            entitiesEnd = countEntities();
+            contraptions = countContraptions();
+            heapEnd = usedHeap();
+            travelled = rig.centre().x() - startCentre;
+            trainTravelled = bridged.travelToDate();
+
+            if (rig.isRemoved()) {
+                fail("the body was removed during the run");
+                return;
+            }
+            if (!TrainBridge.isBridged(train) || !bridged.isActive()) {
+                fail("the bridge did not survive the run");
+                return;
+            }
+            if (contraptions != 0) {
+                fail(contraptions + " carriage contraption entities exist for a bridged train");
+                return;
+            }
+            if (entitiesEnd > entitiesStart) {
+                fail("the level gained entities while nothing was spawned: " + entitiesStart
+                        + " -> " + entitiesEnd);
+                return;
+            }
+            if (Math.abs(travelled - trainTravelled) > 0.5) {
+                fail("the carriage drifted from the body over the run: body=" + f(travelled)
+                        + " carriage=" + f(trainTravelled));
+                return;
+            }
+            if (ticksHolding < 0.95 * ticks) {
+                fail("the axles held the rail for only " + ticksHolding + " of " + ticks + " ticks");
+                return;
+            }
+            pass();
+        }
+
+        private int countEntities() {
+            int count = 0;
+            for (var ignored : level.getEntities().getAll()) {
+                count++;
+            }
+            return count;
+        }
+
+        private int countContraptions() {
+            int count = 0;
+            for (var entity : level.getEntities().getAll()) {
+                if (entity instanceof CarriageContraptionEntity) {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        private static long usedHeap() {
+            Runtime runtime = Runtime.getRuntime();
+            return runtime.totalMemory() - runtime.freeMemory();
+        }
+
+        @Override
+        String metrics() {
+            return "ticks=" + ticks
+                    + " travelled=" + f(travelled)
+                    + " carriage_travelled=" + f(trainTravelled)
+                    + " drift=" + f(travelled - trainTravelled)
+                    + " entities_start=" + entitiesStart
+                    + " entities_end=" + entitiesEnd
+                    + " contraption_entities=" + contraptions
+                    + " heap_start_mb=" + (heapStart >> 20)
+                    + " heap_end_mb=" + (heapEnd >> 20)
+                    + " lateral_max=" + f(lateralMax)
+                    + " ticks_holding=" + ticksHolding
+                    + " bridged=" + (train != null && TrainBridge.isBridged(train));
+        }
+
+        @Override
+        void cleanup() {
+            if (train != null) {
+                TrainBridge.detach(train);
+                Create.RAILWAYS.removeTrain(train.id);
+                train.invalid = true;
+                train = null;
+            }
+            bridged = null;
+            super.cleanup();
         }
     }
 

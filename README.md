@@ -236,7 +236,8 @@ then measures it over several hundred ticks:
 | `derail` | a 14 m/s sideways push leaves the rail, keeps momentum and falls | speed after the push, height lost, whether the flange ever gave up |
 | `bridge` | a real Create train with one carriage follows the body it is bridged to | commanded and measured speed, distance travelled by the body and by the carriage, drift, lateral error, anchor gap, ramp |
 | `entry` | the debug tool bridges, unbinds and re-binds a train, and the train survives it | the three statuses, distance moved in each state, speed after unbinding, the train's own travel while unbound, and a carriage NBT round trip |
-| `couple` | an unpowered vehicle is pulled by a powered one through the coupling | spacing, rest and actual gap, deformation both from the spring and from the train, both speeds, both distances |
+| `couple` | an unpowered vehicle is pulled by a powered one through the coupling | spacing, rest and actual gap, deformation both from the spring and from the train, both speeds, both distances, and whether the pair has settled |
+| `soak` | a bridged train left running for a minute of game time costs nothing that grows | entities before and after, contraption entities, heap, drift between body and carriage, ticks every axle held its rail |
 
 Each scenario prints one line of numbers and the run ends with
 `CTS SELFTEST SUMMARY scenarios=5 passed=5 failed=0`; the CI job fails unless that line says
@@ -256,10 +257,20 @@ entry    PASS bridge=BRIDGED unbridge=UNBRIDGED rebridge=BRIDGED
               moved_while_unbound=0.512 speed_after_unbind=0.039
               train_moved_unbound=1.600 moved_after_rebind=1.569
               nbt_class=Carriage nbt_spacing=2 nbt_ok=true
-couple   PASS spacing=6.000 rest=10.000 gap_start=10.000 gap_end=10.240
+couple   PASS spacing=6.000 rest=10.000 rest_minus_spacing=4.000
+              gap_start=10.000 gap_end=10.240
+              gap_at_20=10.134 gap_at_40=10.209 gap_at_80=10.240
+              gap_min=10.240 gap_max=10.240 gap_drift=0.000
               extension=0.240 peak_extension=0.246 train_deformation=-0.240
-              v_front=0.834 v_rear=0.884 front_moved=10.132 rear_moved=9.892
+              rel_speed_mean=0.000 rel_speed_instant=0.000 rel_speed_worst=0.000
+              front_v_bias=-0.045 rear_v_bias=0.005
+              v_front=0.834 v_rear=0.884
+              front_moved=25.073 rear_moved=24.833
               trailer_driven=false derailed=false
+soak     PASS ticks=1200 travelled=20.982 carriage_travelled=20.982 drift=0.000
+              entities_start=7 entities_end=7 contraption_entities=0
+              heap_start_mb=607 heap_end_mb=495
+              lateral_max=0.000 ticks_holding=1200 bridged=true
 ```
 
 The `entry` scenario calls the same function the tool calls, with the position of a truck - the path a
@@ -272,12 +283,72 @@ the thing that would silently break a train after a save.
 
 The `couple` scenario assembles a second vehicle with two **idling** trucks behind the powered one, so
 it cannot pull itself: `trailer_driven=false`. The train's spacing is 6.000 blocks between the facing
-carriage points, while the bodies start 10.000 blocks apart; over 260 ticks the gap settles at 10.240,
-so the spring's deformation is 0.240 blocks (peaking at 0.246), and the train's own deformation formula
-applied to the travelling points gives -0.240 - the same number with the opposite sign, which is the
-documented convention, not a coincidence (`|stress + extension| = 0.000`). Both bodies move: the leader
-10.132 blocks, the wagon 9.892, at 0.834 and 0.884 m/s. The leader is slower than in the `bridge`
-scenario because it is pulling a second body; the wagon has no motor and still keeps up.
+carriage points, while the bodies start 10.000 blocks apart; the gap opens to 10.134 by tick 20, 10.209
+by tick 40, and stops at 10.240 by tick 80 - four seconds of spin-up in which the powered vehicle pulls
+away from the wagon it has not stretched the spring enough to carry yet. From tick 400 to tick 600 the
+gap is 10.240 in every single tick (`gap_min = gap_max`), it drifts 0.000 blocks, and the relative speed
+measured from the distance the bodies actually covered is 0.000 m/s, worst tick included. The two bodies
+are locked together; the spring's deformation is a constant 0.240 blocks (peak 0.246) and it is what the
+wagon is being towed by.
+
+Two readings in this scenario need a warning label, because both were mistaken for defects at first:
+
+- **`v_front=0.834` against `v_rear=0.884` is not relative motion.** The gap is constant to the third
+  decimal in the same run, so the two bodies cannot be separating. Comparing each reported velocity with
+  the distance its own body covered in that tick explains it: the front's handle velocity reads 0.045
+  m/s *below* its own displacement rate, every tick, worst equal to mean; the rear's reads 0.005 above.
+  A constant offset like that is an ordering artefact of reading the velocity either side of the last
+  impulse of a step, not a speed. Position is the ground truth here, and position says both bodies move
+  at 0.879 m/s once settled.
+- **`spacing=6.000` and `rest=10.000` are two different measurements of a gap**, and the 4.000 between
+  them is geometry, not a bug. See the next section.
+
+### Why the gap has two numbers
+
+`Train.carriageSpacing` and the coupling's rest length both describe the distance between two
+carriages, but they are not the same distance:
+
+```
+spacing_i = | P_trailing(i) - P_leading(i+1) |     on the track, fixed when the train is built
+rest_i    = | C_i - C_(i+1) |                      between centres of mass, fixed at coupling
+rest_i    = spacing_i + delta_i                    delta is a constant of the consist
+```
+
+`P` are the carriages' facing travelling points, `C` are the bodies' centres of mass. `delta` is how far
+each vehicle's centre sits from its carriage's reference point; for the harness rig it is exactly 4.000
+blocks, because each five-block body carries its carriage's two reference points two blocks inboard of
+its centre.
+
+Both numbers are used only as *differences from their own zero*, which is why the offset cancels: the
+spring pulls with `stiffness * (distance - rest)` and Create computes `stress = spacing - anchorDistance`,
+so a 0.240-block change in the bodies produces +0.240 of extension and -0.240 of stress, and the sum is
+0.000 (`|stress + extension| <= 0.5` is asserted). The spring's zero is set at the moment of coupling and
+Create's is set when the train was built; neither is derived from the other, so **the coupling does not
+enforce the train's spacing** - it enforces whatever gap the bodies had when they were bridged. A consist
+whose bodies are laid out very differently from the train's spacing gets a warning in the log at bridge
+time (`the bodies are ... apart but the train's spacing is ...`), because then Create's stress and the
+spring's force are describing different geometry.
+
+### What a bridged train costs over time
+
+The `soak` scenario runs a bridged train for 1200 ticks - one minute of game time - and watches the
+things a long session would expose:
+
+- **entities:** 7 before, 7 after - the same seven item entities the earlier scenarios left behind - and
+  **0 `CarriageContraptionEntity`** at any point. The suppressed contraption is never instantiated: there
+  is no entity to tick, no entity to save and none to leak.
+- **heap:** 607 MB at the start, 495 MB at the end, with telemetry reading 751 MB early in the run. It is
+  not monotonic and the JVM reclaimed more than the run allocated; this is a shape, not a leak claim.
+- **bridge integrity:** the carriage still follows the body (`drift=0.000` over the minute), every axle
+  held its rail for 1200 of 1200 ticks, and the lateral error never exceeded 0.000 blocks.
+
+What still holds memory is small and bounded: one `DimensionalCarriageEntity` per carriage per
+dimension (anchors and a pivot, no entity), one serialised tag per carriage, and the two `CarriageBody`
+objects. The per-tick work the mod adds is one pass over the bridged trains and their gaps.
+
+**Open, not answered:** an hours-long session with chunk unload and reload, trains deleted while
+bridged, and bodies unloaded in far chunks is not covered by a one-minute run. It is recorded as an open
+question for the phase that touches unloading (D), rather than presented as tested.
 
 The bridge scenario builds a real `Train` with a real `Carriage` on the same track graph, registers
 it in Create's railway manager and bridges it to the rig. It then lets Create's own train loop drive:
@@ -325,6 +396,11 @@ measurement from play.
   comes from Create's private field and is not asserted directly.
 - **A pair that deforms by more than four blocks derails the train, by Create's own rule.** The spring
   is capped at 14 m/s^2 so this is hard to reach, but a body wedged against a wall will do it.
+- **A bridge is not covered for hours of play.** One minute of game time is measured (`soak`); chunk
+  unload, reload, and deleting a train while it is bridged are not. Open until phase D.
+- **Handle velocities can lag positions by a fraction of a tick.** The front body's velocity reads
+  0.045 m/s below the distance it covered, constantly; anything that needs a true speed should use
+  displacement, as the bridge does.
 - **No passengers, no cargo while bridged.** A bridged carriage has no contraption entity, so there
   is nothing to ride in and nothing to open. See "What a bridged carriage does not have" above.
 - **No station stops and no signal stops while bridged.** Create's navigation needs a conductor from

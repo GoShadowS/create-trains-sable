@@ -2266,10 +2266,12 @@ public final class SelfTest {
             if (rig == null || train == null || bridged.size() != bodies.size()) {
                 return;
             }
-            if (entitiesStart < 0) {
-                // The baseline is taken on the first tick that can see the reference entity: an
-                // entity added during this scenario's begin() is still pending, and a count of zero
-                // at both ends of the run is a check that cannot fail.
+            if (entitiesStart < 0 && ticks >= 40) {
+                // The baseline is taken after two seconds, not on the first tick. An entity added
+                // during this scenario's begin() is still pending then, and entities the world loads
+                // or the previous scenario left behind - a villager near spawn, an item a broken
+                // block dropped - appear a little later and were counted as a leak. Two seconds is
+                // longer than any of those delays and far shorter than the run.
                 int live = countEntities();
                 if (live >= 1) {
                     entitiesStart = live;
